@@ -286,9 +286,11 @@ int main(int argc, char * argv[], char * env[]) {
 	bexec = NULL;
 	
 	if (debugger) {
+	#if 0
 		err = bt_debugger(butcher, debugger);
 		if (err)
 			goto finalize;
+	#endif
 	}
 
 	err = bt_tune(butcher,

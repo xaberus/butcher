@@ -10,14 +10,17 @@
 
 bt_tester_t tester;
 
-int main(int argc, char *argv[]) 
+int main(int argc, char * argv[], char * env[]) 
 {
 	void * dl_handle;
 	void * object;
 	int result, test_result;
 
-	if (argc != 5)
+
+	if (argc != 5) {
+		dprintf(2, "argc: %d != 5!\n", argc);
 		exit(-1);
+	}
 
 	char * dl_lib = argv[1];
 	char * dl_setup = argv[2];
@@ -70,7 +73,7 @@ int main(int argc, char *argv[])
 	write(tester.fd, "\0", 1);
 	write(tester.fd, &rec, sizeof(struct result_rec));
 
-	/* does not make much sense to run the test if setup failed */
+	/* does not make much sense to run the test if setup has failed */
 	if (result <= BT_TEST_SUCCEEDED) {
 		test_result = (*tester.function)(object);
 

@@ -37,33 +37,17 @@ static int bt_elf_load(bt_elf_t * self, Elf * elf);
 static int bt_elf_delete(bt_elf_t ** elf);
 static int bt_chopper(bt_t * self, bt_test_t * test);
 
-/**
- * logs a message to the write end of the pipe in the tester object
- *
- * @param[in] tester the tester object
- * @param[in] filename should be "__FILE__" for most cases
- * @param[in] function should be "__FUNCTION__" for most cases
- * @param[in] line should be "__LINE__" for most cases
- * @param[in] fmt vdprintf a format string
- * @param[in] ... remaining arguments to vdprintf
- */
-void bt_log_function(bt_tester_t * tester, const char *filename, const char *function, int line, char *fmt, ...)
-{
-	va_list argp;
-	UNUSED_PARAM(function);
+#define RED			"\033[1;31m"
+#define GREEN		"\033[1;32m"
+#define YELLOW	"\033[1;33m"
+#define BLUE		"\033[1;34m"
+#define PURPLE	"\033[1;35m"
+#define CYAN		"\033[1;36m"
 
-	if (!tester)
-		return;
+#define RED_BG	"\033[2;41m"
+#define CYAN_BG	"\033[2;46m"
 
-	va_start(argp, fmt);
-
-	dprintf(tester->pipefd[1], "%s:%s:%d: ", filename, function, line);
-	vdprintf(tester->pipefd[1], fmt, argp);
-
-	va_end(argp);
-
-
-}
+#define ENDCOL	"\033[0m"
 
 /**
  * creates a new log line
@@ -298,12 +282,18 @@ int bt_test_new(bt_test_t ** test, bt_suite_t * suite, const char * dlname, size
 		}
 	}
 
+	/* check symbol */
 	ptr = dlsym(self->suite->elf->dlhandle, dlname);
 	if (!ptr) {
 		err = EINVAL;
 		goto failure;
 	}
-	*(void **)(&self->function) = ptr;
+
+	self->function = strdup(dlname);
+	if  (!self->function) {
+		err = ENOMEM;
+		goto failure;
+	}
 
 	*test = self;
 
@@ -334,6 +324,7 @@ int bt_test_delete(bt_test_t ** test)
 
 	free(self->name);
 	free(self->description);
+	free(self->function);
 	bt_log_delete(&self->log);
 
 	free(self);
@@ -394,11 +385,23 @@ int bt_suite_new(bt_suite_t ** suite, bt_elf_t * elf, const char * dlname, size_
 
 	snprintf(str, length, "__bt_suite_%s_setup", self->name);
 	ptr = dlsym(self->elf->dlhandle, str);
-	*(void **)(&self->setup) = ptr;
+	if (ptr) {
+		self->setup = strdup(str);
+		if (!self->setup) {
+			err = ENOMEM;
+			goto failure;
+		}
+	}
 
 	snprintf(str, length, "__bt_suite_%s_teardown", self->name);
 	ptr = dlsym(self->elf->dlhandle, str);
-	*(void **)(&self->teardown) = ptr;
+	if (ptr) {
+	self->teardown = strdup(str);
+		if (!self->teardown) {
+			err = ENOMEM;
+			goto failure;
+		}
+	}
 
 	*suite = self;
 
@@ -519,6 +522,10 @@ int bt_suite_delete(bt_suite_t ** suite)
 	}
 	free(self->name);
 	free(self->description);
+	if (self->setup)
+		free(self->setup);
+	if (self->teardown)
+		free(self->teardown);
 
 	free(self);
 
@@ -564,7 +571,6 @@ int bt_elf_new(bt_elf_t ** elf, bt_t * butcher, const char * elfname)
 		err = ENFILE;
 		goto failure;
 	}
-	dprintf(self->butcher->fd, "%s\n", dlerror());
 
 	*elf = self;
 
@@ -748,7 +754,7 @@ int bt_new(bt_t ** butcher)
  *
  * @return the operation error code
  */
-int bt_init(bt_t * self, int fd, const char * smatch, const char * tmatch)
+int bt_init(bt_t * self, const char * name, int fd, const char * smatch, const char * tmatch)
 {
 	if (!self)
 		return_error(EINVAL);
@@ -758,6 +764,11 @@ int bt_init(bt_t * self, int fd, const char * smatch, const char * tmatch)
 	}
 
 	self->fd = fd;
+
+	self->bexec = strdup(name);
+	if (!self->bexec)
+			return_error(ENOMEM);
+		
 
 	if (smatch) {
 		if(regcomp(&self->sregex, smatch, REG_EXTENDED | REG_NOSUB))
@@ -776,7 +787,6 @@ int bt_init(bt_t * self, int fd, const char * smatch, const char * tmatch)
 	}
 
 	self->initialized = 1;
-
 	return 0;
 }
 
@@ -894,30 +904,30 @@ int bt_list(bt_t * self)
 		return_error(EINVAL);
 
 	dprintf(self->fd, "%slisting loaded objects%s...\n",
-			self->color?"\x1b[1;32m":"", self->color?"\x1b[0m":"");
+			self->color?GREEN:"", self->color?ENDCOL:"");
 
 	elf_cur = self->elfs;
 	while (elf_cur) {
 		dprintf(self->fd, "[%self%s, name='%s%s%s', dlhandle=%p]\n",
-				self->color?"\x1b[1;33m":"", self->color?"\x1b[0m":"",
-				self->color?"\x1b[1;31m":"", elf_cur->name, self->color?"\x1b[0m":"",
+				self->color?YELLOW:"", self->color?ENDCOL:"",
+				self->color?RED:"", elf_cur->name, self->color?ENDCOL:"",
 				elf_cur->dlhandle);
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s', setup=%p, teardown=%p]\n",
-					self->color?"\x1b[1;34m":"", self->color?"\x1b[0m":"",
-					self->color?"\x1b[1;32m":"", suite_cur->name, self->color?"\x1b[0m":"",
-					self->color?"\x1b[1;35m":"", suite_cur->description, self->color?"\x1b[0m":"",
-					*(void **)(&suite_cur->setup), *(void **)(&suite_cur->teardown));
+			dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s', setup=%s, teardown=%s]\n",
+					self->color?BLUE:"", self->color?ENDCOL:"",
+					self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+					self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"",
+					suite_cur->setup, suite_cur->teardown);
 
 			test_cur = suite_cur->tests;
 			while (test_cur) {
-				dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s', function=%p]\n",
-						self->color?"\x1b[1;35m":"", self->color?"\x1b[0m":"",
-						self->color?"\x1b[1;31m":"", test_cur->name, self->color?"\x1b[0m":"",
-						self->color?"\x1b[1;33m":"", test_cur->description, self->color?"\x1b[0m":"",
-						*(void **)(&test_cur->function));
+				dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s', function=%s]\n",
+						self->color?PURPLE:"", self->color?ENDCOL:"",
+						self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
+						self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"",
+						test_cur->function);
 
 				test_cur = test_cur->next;
 			}
@@ -943,16 +953,9 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 {
 	int status;
 	pid_t pid;
-	bt_tester_t tester;
 	int err;
 
-	struct result_rec {
-		char magic[5];
-		char results[BT_PASS_MAX];
-		char done;
-	};
-
-	int pipefd[2], pipetmpfd[2];
+	int pipeout[2];
 
 	if (!self || !self->initialized || !test)
 		return_error(EINVAL);
@@ -961,62 +964,124 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 	if (err)
 		return_error(err);
 
-	pipe2(tester.pipefd, O_NONBLOCK);
-	tester.setup = test->suite->setup;
-	tester.function = test->function;
-	tester.teardown = test->suite->teardown;
+	pipe2(pipeout, O_NONBLOCK);
 
 	pid = fork();
 	if (pid == -1)
 		return_error(ENAVAIL);
 	else if (pid == 0) {
 		/* forked here */
+
+		/* XXX fixme(debugger) */
+		char * argv[] = {
+			self->bexec,
+			test->suite->elf->name,
+			test->suite->setup,
+			test->suite->teardown,
+			test->function,
+			NULL
+		};
+		
+		dprintf(2, "CALL %s %s %s %s %s\n", argv[0], argv[1], argv[2], argv[3], argv[4]);
+
+		/* redirect stdout */
+		close(pipeout[0]);
+		close(STDOUT_FILENO);
+		dup2(pipeout[1], STDOUT_FILENO);
+		close(pipeout[1]);
+		
+		close(STDIN_FILENO);
+
+		argv[0]="bexec";
+		argv[1]=test->suite->elf->name;
+		argv[2]=test->suite->setup;
+		argv[3]=test->suite->teardown;
+		argv[4]=test->function;
+		argv[5]=NULL;
+
+		execve("bexec", argv, NULL);
+		/* not reached */
+		dprintf(2, "could not call bexec");
+		exit(-1);
 	} else {
-		ssize_t length, bytes;
-		char * buf, c;
-		ssize_t i, n;
-		err = 0;
-		length = 0;
+
+		struct result_rec rec = {
+			"\x01\x02\x03\x04",
+			{BT_TEST_NONE, BT_TEST_NONE, BT_TEST_NONE},
+			0
+		};
+		char * buffer, * tmp;
+		char c;
+		size_t buffer_length;
+		size_t buffer_length_new;
+		size_t buffer_cur;
+		size_t i, n;
+		size_t bytes;
+		ssize_t length;
+		pid_t waitret;
+		int running;
+
+		close(pipeout[1]);
+		
+		buffer = NULL;
+		buffer_length=512;
+		buffer_length_new=512;
+		buffer_cur = 0;
 		bytes = 0;
-		struct result_rec rec = {"\x01\x02\x03\x04", {BT_TEST_NONE, BT_TEST_NONE, BT_TEST_NONE}, 0};
+		running = 1;
 
-		close(tester.pipefd[1]);
-		if (waitpid(pid, &status, 0) == -1)
-			goto out;
 
-		/* Linus' way to do the right thing?! */
-		err = ioctl(tester.pipefd[0], FIONREAD, &bytes);
-		if (err) {
-			err = errno;
-			goto out;
-		}
+		do {
+			usleep(100);
+			
+			waitret = waitpid(pid, &status, WNOHANG);
+			if (waitret == -1)
+				goto loop_wait_fail;
+			
+			if (waitret == pid)
+				running = 0;
 
-		if (bytes == 0)
-			bytes = 512;
+			err = ioctl(pipeout[0], FIONREAD, &bytes);
+			if (err)
+				goto loop_io_failure;
 
-		buf = malloc(bytes + 1);
-		if (!buf) {
-			err = ENOMEM;
-			goto out;
-		}
+			if (buffer_length - buffer_cur < bytes)
+				buffer_length_new = buffer_length * 2;
 
-		length = read(tester.pipefd[0], buf, bytes);
-		buf[length] = '\0';
+			if (!buffer || buffer_length != buffer_length_new) {
+				tmp = realloc(buffer, buffer_length_new + 1);
+				if (!tmp) {
+					err = ENOMEM;
+					goto loop_oom_failure;
+				}
+				buffer = tmp; tmp = NULL;
+				buffer_length = buffer_length_new;
+			}
+		
+			length = read(pipeout[0], buffer + buffer_cur, bytes);
+			buffer_cur += length;
+
+		} while(running);
+		
+		close(pipeout[0]);
+
+		/* terminate the buffer */
+		buffer[buffer_cur]='\0';
 
 		i = 0;
-		while (i < length) {
-			for (n = i; n < length && (c = buf[n]) != '\n' && c != '\0'; n++);
+		while (i < buffer_cur) {
+			for (n = i; n < buffer_cur && (c = buffer[n]) != '\n' && c != '\0'; n++);
 			switch (c) {
 				case '\n':
-					err = bt_log_msgcpy(test->log, buf + i, n - i);
+					err = bt_log_msgcpy(test->log, buffer + i, n - i);
 					if (err)
-						goto out;
+						goto parse_failure;
 					i = n + 1;
 					break;
 				default:
-					if (length > i && length- i > (ssize_t)sizeof(struct result_rec)) {
-						if (strcmp(buf + i + 1, rec.magic) == 0) {
-							memcpy(&rec, buf + i + 1, sizeof(struct result_rec));
+					if (buffer_cur > i && buffer_cur- i > sizeof(struct result_rec)) {
+						if (strcmp(buffer + i + 1, rec.magic) == 0) {
+							memcpy(&rec, buffer + i + 1, sizeof(struct result_rec));
 						}
 					}
 					i = n + sizeof(struct result_rec) + 1;
@@ -1024,9 +1089,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			}
 		}
 
-
-		free(buf);
-		close(tester.pipefd[0]);
+		free(buffer);
 
 		if (WIFEXITED(status)) {
 			if (!rec.done)
@@ -1044,18 +1107,33 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 					break;
 				}
 			}
-
-		} else
-			goto out;
+		}
 
 		return 0;
 
-		out: {
-			if (buf)
-				free(buf);
-			close(tester.pipefd[0]);
+		loop_wait_fail:
+			close(pipeout[0]);
+			err = EINVAL;
+			goto failure;
+			
+		loop_io_failure:
+			close(pipeout[0]);
+			err = errno;
+			goto failure;
+
+		loop_oom_failure:
+			close(pipeout[0]);
+			err = ENOMEM;
+			goto failure;
+
+		parse_failure:
+			goto failure;
+
+		/* failed */
+		failure:
+			if (buffer)
+				free(buffer);
 			return_error(err);
-		}
 	}
 }
 
@@ -1120,20 +1198,20 @@ int bt_report(bt_t * self)
 	int allcount = 0;
 
 	dprintf(self->fd, "%slisting results for loaded objects%s (worst counts)...\n",
-			self->color?"\x1b[1;32m":"", self->color?"\x1b[0m":"");
+			self->color?GREEN:"", self->color?ENDCOL:"");
 
 	elf_cur = self->elfs;
 	while (elf_cur) {
 		dprintf(self->fd, "[%self%s, name='%s%s%s']\n",
-				self->color?"\x1b[1;33m":"", self->color?"\x1b[0m":"",
-				self->color?"\x1b[1;31m":"", elf_cur->name, self->color?"\x1b[0m":"");
+				self->color?YELLOW:"", self->color?ENDCOL:"",
+				self->color?RED:"", elf_cur->name, self->color?ENDCOL:"");
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
 			dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
-					self->color?"\x1b[1;34m":"", self->color?"\x1b[0m":"",
-					self->color?"\x1b[1;32m":"", suite_cur->name, self->color?"\x1b[0m":"",
-					self->color?"\x1b[1;35m":"", suite_cur->description, self->color?"\x1b[0m":"");
+					self->color?BLUE:"", self->color?ENDCOL:"",
+					self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+					self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
 
 			unsigned int results[BT_TEST_MAX] = { 0 };
 			int result;
@@ -1149,17 +1227,17 @@ int bt_report(bt_t * self)
 
 				if (self->verbose || result > BT_TEST_SUCCEEDED) {
 					dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s']\n",
-							self->color?"\x1b[1;35m":"", self->color?"\x1b[0m":"",
-							self->color?"\x1b[1;31m":"", test_cur->name, self->color?"\x1b[0m":"",
-							self->color?"\x1b[1;33m":"", test_cur->description, self->color?"\x1b[0m":"");
+							self->color?PURPLE:"", self->color?ENDCOL:"",
+							self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
+							self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"");
 				}
 
-				if (test_cur->log) {
+				if ((self->verbose || result > BT_TEST_SUCCEEDED) && test_cur->log) {
 					line_cur = test_cur->log->lines;
 					while (line_cur) {
 						if (result > BT_TEST_SUCCEEDED) {
 							dprintf(self->fd, "   %s%s%s\n",
-									self->color?"\x1b[1;31m":"", line_cur->contents, self->color?"\x1b[0m":"");
+									self->color?RED:"", line_cur->contents, self->color?ENDCOL:"");
 						} else {
 							dprintf(self->fd, "   %s\n", line_cur->contents);
 						}
@@ -1180,24 +1258,24 @@ int bt_report(bt_t * self)
 
 							switch (i) {
 								case BT_PASS_SETUP:
-									dprintf(self->fd, "%ssetup%s ", self->color?"\x1b[1;36m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%ssetup%s ", self->color?CYAN:"", self->color?ENDCOL:""); break;
 								case BT_PASS_TEST:
-									dprintf(self->fd, "%stest%s ", self->color?"\x1b[1;36m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%stest%s ", self->color?CYAN:"", self->color?ENDCOL:""); break;
 								case BT_PASS_TEARDOWN:
-									dprintf(self->fd, "%steardown%s ", self->color?"\x1b[1;36m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%steardown%s ", self->color?CYAN:"", self->color?ENDCOL:""); break;
 								default:
 									break;
 							}
 
 							switch (test_cur->results[i]) {
 								case BT_TEST_SUCCEEDED:
-									dprintf(self->fd, "%ssucceeded%s", self->color?"\x1b[1;32m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%ssucceeded%s", self->color?GREEN:"", self->color?ENDCOL:""); break;
 								case BT_TEST_IGNORED:
-									dprintf(self->fd, "%signored%s", self->color?"\x1b[1;33m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%signored%s", self->color?YELLOW:"", self->color?ENDCOL:""); break;
 								case BT_TEST_FAILED:
-									dprintf(self->fd, "%sfailed%s", self->color?"\x1b[1;31m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%sfailed%s", self->color?RED:"", self->color?ENDCOL:""); break;
 								case BT_TEST_CORRUPTED:
-									dprintf(self->fd, "%scorrupted%s", self->color?"\x1b[1;31m":"", self->color?"\x1b[0m":""); break;
+									dprintf(self->fd, "%scorrupted%s", self->color?RED:"", self->color?ENDCOL:""); break;
 								default:
 									break;
 							}
@@ -1208,13 +1286,13 @@ int bt_report(bt_t * self)
 				if (self->verbose || result > BT_TEST_SUCCEEDED) {
 					switch (result) {
 						case BT_TEST_SUCCEEDED:
-							dprintf(self->fd, " -> [%ssucceeded%s]\n", self->color?"\x1b[1;46m\x1b[2;32m":"", self->color?"\x1b[0m":""); break;
+							dprintf(self->fd, " -> [%ssucceeded%s]\n", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_IGNORED:
-							dprintf(self->fd, " -> [%signored%s]\n", self->color?"\x1b[1;46m\x1b[2;33m":"", self->color?"\x1b[0m":""); break;
+							dprintf(self->fd, " -> [%signored%s]\n", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_FAILED:
-							dprintf(self->fd, " -> [%sfailed%s]\n", self->color?"\x1b[1;41m":"", self->color?"\x1b[0m":""); break;
+							dprintf(self->fd, " -> [%sfailed%s]\n", self->color?RED_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_CORRUPTED:
-							dprintf(self->fd, " -> [%scorrupted%s]\n", self->color?"\x1b[1;41m":"", self->color?"\x1b[0m":""); break;
+							dprintf(self->fd, " -> [%scorrupted%s]\n", self->color?RED_BG:"", self->color?ENDCOL:""); break;
 						default:
 							break;
 					}
@@ -1280,6 +1358,8 @@ int bt_delete(bt_t ** butcher)
 		bt_elf_delete(&cur);
 		cur = tmp;
 	}
+
+	free(self->bexec);
 	
 	free(self);
 

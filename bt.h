@@ -115,6 +115,11 @@ __bt_suite_##__sname##_test_##__tname(object)
 #include <stdio.h>
 #include <unistd.h>
 
+#define bt_log(...) \
+	do { \
+		dprintf(STDOUT_FILENO, __VA_ARGS__); \
+	} while(0)
+
 #define bt_assert(__expr) \
 	do { \
 		if (!(__expr)) { \
