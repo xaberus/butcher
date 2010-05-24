@@ -26,8 +26,10 @@ enum {
 };
 
 
-#define BT_FLAG_VERBOSE	(1 << 0)
-#define BT_FLAG_COLOR		(1 << 1)
+#define BT_FLAG_VERBOSE				(1 << 0)
+#define BT_FLAG_COLOR					(1 << 1)
+#define BT_FLAG_DESCRIPTIONS	(1 << 2)
+#define BT_FLAG_MESSAGES			(1 << 3)
 
 typedef struct bt_tester bt_tester_t;
 
@@ -139,17 +141,28 @@ __bt_suite_##__sname##_test_##__tname(object)
 		} \
 	} while(0)
 
+#define _bt_assert_type_not_equal(__type, __fmt, __actual, __expected, __not, __extra) \
+	do { \
+		if (((__actual) == (__expected))) { \
+			dprintf(STDOUT_FILENO, "%s:%s:%d: Assertion failed: expeced " __not __fmt ", got "__fmt __extra "\n", \
+					__FILE__, __FUNCTION__, __LINE__, \
+					(__type)__expected, (__type)__actual); \
+			return BT_RESULT_FAIL; \
+		} \
+	} while(0)
+
+
 #define bt_assert_int_equal(__actual, __expected) \
 	_bt_assert_type_equal(signed long int, "%ld", __actual, __expected, "", "")
 
 #define bt_assert_int_not_equal(__actual, __expected) \
-	_bt_assert_type_equal(signed long int, "%ld", __actual, __expected, "not ", "")
+	_bt_assert_type_not_equal(signed long int, "%ld", __actual, __expected, "not ", "")
 
 #define bt_nmd_assert_int_equal(__actual, __expected, __name) \
 	_bt_assert_type_equal(signed long int, "%ld", __actual, __expected, "", " (test label: "__name")") \
 
 #define bt_nmd_assert_int_not_equal(__actual, __expected, __name) \
-	_bt_assert_type_equal(signed long int, "%ld", __actual, __expected, "not ", " (test label: "__name")") \
+	_bt_assert_type_not_equal(signed long int, "%ld", __actual, __expected, "not ", " (test label: "__name")") \
 
 #define bt_assert_err_equal bt_assert_int_equal
 #define bt_assert_err_not_equal bt_assert_int_not_equal
@@ -158,7 +171,7 @@ __bt_suite_##__sname##_test_##__tname(object)
 	_bt_assert_type_equal(void *, "%p", __actual, __expected, "", "")
 
 #define bt_assert_ptr_not_equal(__actual, __expected) \
-	_bt_assert_type_equal(void *, "%p", __actual, __expected, "not ", "")
+	_bt_assert_type_not_equal(void *, "%p", __actual, __expected, "not ", "")
 
 
 #endif /* BT_H_ */
