@@ -110,12 +110,15 @@ struct bt {
 	bt_elf_t * elfs;
 	char color;
 	char verbose;
+	char descriptions;
+	char messages;
 	char initialized;
 
 	int fd;
 	
 	char * bexec;
-	char * debugger;
+	char ** debugger;
+	unsigned int debugger_nargs;
 
 	regex_t sregex, tregex;
 };
