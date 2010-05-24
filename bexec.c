@@ -59,12 +59,22 @@ int main(int argc, char * argv[], char * env[])
 
 	void * ptr;
 
-	if ((ptr = dlsym(dl_handle, dl_setup)) == NULL)
-		dlerror();
+	if (dl_setup) {
+		if ((ptr = dlsym(dl_handle, dl_setup)) == NULL)
+			dlerror();
 	*(void **)&tester.setup = ptr;
-	if ((ptr = dlsym(dl_handle, dl_teardown)) == NULL)
-		dlerror();
-	*(void **)&tester.teardown = ptr;	
+	} else {
+		tester.setup = NULL;
+	}
+
+	if (dl_teardown) {
+		if ((ptr = dlsym(dl_handle, dl_teardown)) == NULL)
+			dlerror();
+		*(void **)&tester.teardown = ptr;	
+	} else {
+		tester.teardown = NULL;
+	}
+
 	if ((ptr = dlsym(dl_handle, dl_test)) == NULL) {
 		dlerror();
 		exit(-1);
