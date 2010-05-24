@@ -968,7 +968,7 @@ int bt_list(bt_t * self)
 	if (!self || !self->initialized)
 		return_error(EINVAL);
 
-	dprintf(self->fd, "%slisting loaded objects%s...\n",
+	dprintf(self->fd, "%slisting loaded objects%s...\n\n",
 			self->color?GREEN:"", self->color?ENDCOL:"");
 
 	elf_cur = self->elfs;
@@ -1384,7 +1384,7 @@ int bt_report(bt_t * self)
 	unsigned int allresults[BT_TEST_MAX] = { 0 };
 	int allcount = 0;
 
-	dprintf(self->fd, "%slisting results for loaded objects%s (worst counts)...\n",
+	dprintf(self->fd, "%slisting results for loaded objects%s (worst counts)...\n\n",
 			self->color?GREEN:"", self->color?ENDCOL:"");
 
 	elf_cur = self->elfs;
@@ -1508,11 +1508,12 @@ int bt_report(bt_t * self)
 			}
 			allcount += count;
 
-			dprintf(2, "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
-					count, results[BT_TEST_SUCCEEDED], (double)results[BT_TEST_SUCCEEDED] / count * 100,
-					results[BT_TEST_IGNORED], (double)results[BT_TEST_IGNORED] / count * 100,
-					results[BT_TEST_FAILED], (double)results[BT_TEST_FAILED] / count * 100,
-					results[BT_TEST_CORRUPTED], (double)results[BT_TEST_CORRUPTED] / count * 100);
+			if (count)
+				dprintf(2, "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n\n",
+						count, results[BT_TEST_SUCCEEDED], (double)results[BT_TEST_SUCCEEDED] / count * 100,
+						results[BT_TEST_IGNORED], (double)results[BT_TEST_IGNORED] / count * 100,
+						results[BT_TEST_FAILED], (double)results[BT_TEST_FAILED] / count * 100,
+						results[BT_TEST_CORRUPTED], (double)results[BT_TEST_CORRUPTED] / count * 100);
 
 			suite_cur = suite_cur->next;
 		}

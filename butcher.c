@@ -251,11 +251,13 @@ int main(int argc, char * argv[], char * env[]) {
 
 	paramv[paramc] = NULL;
 	
+	dprintf(fd, "#############################\n");
 	dprintf(fd, "### The %sBUTCHER%s unit test ###\n",
 			color?"\x1b[1;31m":"", color?"\x1b[0m":"");
+	dprintf(fd, "#############################\n\n");
 
 	if (smatch || tmatch)
-		dprintf(fd, "tests matching '%s' in suites matching '%s' are going to be loaded\n",
+		dprintf(fd, "tests matching '%s' in suites matching '%s' are going to be loaded\n\n",
 				tmatch?tmatch:".*", smatch?smatch:".*");
 
 	if (!bexec) {
