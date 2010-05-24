@@ -214,7 +214,7 @@ int main(int argc, char * argv[], char * env[]) {
 				case 2: /* match-test */
 					tmatch = argument; break;
 				case 3: /* verbose */
-					verbose = 1; break;
+					verbose ++; break;
 				case 4: /* quiet */
 					verbose = 0; break;
 				case 5: /* color */
@@ -286,16 +286,16 @@ int main(int argc, char * argv[], char * env[]) {
 	bexec = NULL;
 	
 	if (debugger) {
-	#if 0
 		err = bt_debugger(butcher, debugger);
 		if (err)
 			goto finalize;
-	#endif
 	}
 
 	err = bt_tune(butcher,
-				(verbose?BT_FLAG_VERBOSE:0) |
-				(color?BT_FLAG_COLOR:0)
+				((verbose>=1) ? BT_FLAG_VERBOSE:0) |
+				((verbose>=2) ? BT_FLAG_DESCRIPTIONS:0) |
+				((verbose>=3) ? BT_FLAG_MESSAGES:0) |
+				(color ? BT_FLAG_COLOR:0)
 			);
 	if (err)
 		goto finalize;

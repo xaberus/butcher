@@ -806,8 +806,72 @@ int bt_tune(bt_t * self, unsigned int flags)
 	else
 		self->color = 0;
 
+	if (flags & BT_FLAG_DESCRIPTIONS)
+		self->descriptions = 1;
+	else
+		self->descriptions = 0;
+
+	if (flags & BT_FLAG_MESSAGES)
+		self->messages = 1;
+	else
+		self->messages = 0;
+
 	return 0;
 }
+
+int bt_debugger(bt_t * self, const char * dbg)
+{
+	if (!self || !self->initialized || ! dbg)
+		return_error(EINVAL);
+/*
+	self->bexec = strdup(name);
+	if (!self->bexec)
+			return_error(ENOMEM);
+*/
+	const char * p, *t, * pe;
+	unsigned int n=0;
+	
+	p = dbg;
+
+	for (pe = p; pe && *pe; pe++);
+
+	for(t = p; t < pe && *t; t++) {
+		if (*t == ' ')
+			n++;
+	}
+	n++;
+
+	self->debugger = malloc(sizeof(char *) * n);
+	if (!self->debugger)
+		return_error(ENOMEM);
+	memset(self->debugger, 0, sizeof(char *) * n);
+	
+	for (unsigned int i = 0; i < n; i++) {
+		for(t = p; t < pe && *t != ' '; t++);
+		self->debugger[i] = malloc(t-p + 1);
+		if (!self->debugger[i])
+			goto failure;
+		memset(self->debugger[i], 0, t-p + 1);
+		memcpy(self->debugger[i], p, t-p);
+
+		p=t+1;
+	}
+
+	self->debugger_nargs = n;
+
+	return 0;
+
+	failure:
+		for (unsigned int i = 0; i < n; i++) {
+			if (self->debugger[i])
+				free(self->debugger[i]);
+		}
+		free(self->debugger);
+		self->debugger = NULL;
+		return_error(ENOMEM);
+
+}
+
 
 /**
  * loads a couple of shared objects
@@ -916,19 +980,25 @@ int bt_list(bt_t * self)
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s', setup=%s, teardown=%s]\n",
-					self->color?BLUE:"", self->color?ENDCOL:"",
-					self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
-					self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"",
-					suite_cur->setup, suite_cur->teardown);
+			if (self->descriptions)
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s', setup=%s, teardown=%s]\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+						suite_cur->setup, suite_cur->teardown);
 
 			test_cur = suite_cur->tests;
 			while (test_cur) {
-				dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s', function=%s]\n",
-						self->color?PURPLE:"", self->color?ENDCOL:"",
-						self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
-						self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"",
-						test_cur->function);
+				if (self->descriptions)
+					dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s', function=%s]\n",
+							self->color?PURPLE:"", self->color?ENDCOL:"",
+							self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
+							self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"",
+							test_cur->function);
+				else
+					dprintf(self->fd, "  [%stest%s, name='%s%s%s', function=%s]\n",
+							self->color?PURPLE:"", self->color?ENDCOL:"",
+							self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
+							test_cur->function);
 
 				test_cur = test_cur->next;
 			}
@@ -977,16 +1047,28 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 		size_t chunklen, pos;
 		char * env[16] = {NULL};
 		unsigned int e;
+		unsigned int argc;
 		
-		chunklen =
-			strlen(self->bexec) + 2
-			+ strlen("butcher_elf_name") + strlen(test->suite->elf->name) + 2
-			+ strlen("butcher_suite_setup") + strlen(test->suite->setup) + 2
-			+ strlen("butcher_suite_teardown") + strlen(test->suite->teardown) + 2
-			+ strlen("butcher_test_function") + strlen(test->function) + 2
-			+ strlen("butcher_verbose") + strlen("false") + 2
-			+ strlen("LD_LIBRARY_PATH") + strlen(getenv("LD_LIBRARY_PATH")) + 2
-			;
+		chunklen = 0;
+
+		if (self->bexec)
+		chunklen += strlen(self->bexec) + 2;
+		if (test->suite->elf->name)
+			chunklen += strlen("butcher_elf_name") + strlen(test->suite->elf->name) + 2;
+
+		if (test->suite->setup)
+			chunklen += strlen("butcher_suite_setup") + strlen(test->suite->setup) + 2;
+
+		if (test->suite->teardown)
+			chunklen += strlen("butcher_suite_teardown") + strlen(test->suite->teardown) + 2;
+
+		if (test->function)
+			chunklen += strlen("butcher_test_function") + strlen(test->function) + 2;
+
+		chunklen += strlen("butcher_verbose") + strlen("false") + 2;
+
+		if (getenv("LD_LIBRARY_PATH"))
+			chunklen += strlen("LD_LIBRARY_PATH") + strlen(getenv("LD_LIBRARY_PATH")) + 2;
 
 		chunk = malloc(chunklen);
 		if (!chunk)
@@ -1021,7 +1103,31 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
 		}
 
-		char * argv[] = { self->bexec };
+		argc = 1 + 1;
+		if (self->debugger)
+			argc += self->debugger_nargs;
+
+		char * argv[argc];
+		
+		if (self->debugger) {
+			unsigned int k = 0;
+			for (; k < self->debugger_nargs; k++)
+				argv[k] = self->debugger[k];
+
+			argv[k++] = self->bexec;
+			argv[k] = NULL;
+		} else {
+			argv[0] = self->bexec;
+			argv[1] = NULL;
+		}
+
+		if (self->verbose) {
+			dprintf(STDERR_FILENO, "CALL ");
+			for (unsigned  int k = 0; k < argc; k++) {
+				dprintf(STDERR_FILENO, "%s ", argv[k]);
+			}
+			dprintf(STDERR_FILENO, "\n");
+		}
 
 		/* redirect stdout */
 		close(pipeout[0]);
@@ -1031,7 +1137,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 		
 		close(STDIN_FILENO);
 
-		execve(self->bexec, argv, env);
+		execve(argv[0], argv, env);
 		/* not reached */
 		dprintf(2, "could not call bexec\n");
 
@@ -1289,10 +1395,15 @@ int bt_report(bt_t * self)
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
-					self->color?BLUE:"", self->color?ENDCOL:"",
-					self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
-					self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
+			if (self->descriptions)
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+						self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
+			else
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
 
 			unsigned int results[BT_TEST_MAX] = { 0 };
 			int result;
@@ -1307,10 +1418,15 @@ int bt_report(bt_t * self)
 				}
 
 				if (self->verbose || result > BT_TEST_SUCCEEDED) {
-					dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s']\n",
-							self->color?PURPLE:"", self->color?ENDCOL:"",
-							self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
-							self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"");
+					if (self->descriptions)
+						dprintf(self->fd, "  [%stest%s, name='%s%s%s', description='%s%s%s']\n",
+								self->color?PURPLE:"", self->color?ENDCOL:"",
+								self->color?RED:"", test_cur->name, self->color?ENDCOL:"",
+								self->color?YELLOW:"", test_cur->description, self->color?ENDCOL:"");
+					else
+						dprintf(self->fd, "  [%stest%s, name='%s%s%s']\n",
+								self->color?PURPLE:"", self->color?ENDCOL:"",
+								self->color?RED:"", test_cur->name, self->color?ENDCOL:"");
 				}
 
 				if ((self->verbose || result > BT_TEST_SUCCEEDED) && test_cur->log) {
@@ -1329,7 +1445,7 @@ int bt_report(bt_t * self)
 				if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED)
 					dprintf(self->fd, "   -> results: ");
 
-				if (self->verbose || result > BT_TEST_SUCCEEDED) {
+				if (self->messages || result > BT_TEST_SUCCEEDED) {
 					for (int i = 0, flag = 0; i < BT_PASS_MAX; i++) {
 						if (test_cur->results[i] > BT_TEST_NONE) {
 							if (flag)
@@ -1364,7 +1480,7 @@ int bt_report(bt_t * self)
 					}
 				}
 
-				if (self->verbose || result > BT_TEST_SUCCEEDED) {
+				if (self->messages || result > BT_TEST_SUCCEEDED) {
 					switch (result) {
 						case BT_TEST_SUCCEEDED:
 							dprintf(self->fd, " -> [%ssucceeded%s]\n", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
@@ -1441,6 +1557,12 @@ int bt_delete(bt_t ** butcher)
 	}
 
 	free(self->bexec);
+	for (unsigned int i = 0; i < self->debugger_nargs; i++) {
+		if (self->debugger[i])
+			free(self->debugger[i]);
+	}
+	free(self->debugger);
+
 	
 	free(self);
 
