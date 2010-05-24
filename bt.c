@@ -325,7 +325,8 @@ int bt_test_delete(bt_test_t ** test)
 	free(self->name);
 	free(self->description);
 	free(self->function);
-	bt_log_delete(&self->log);
+	if (self->log)
+		bt_log_delete(&self->log);
 
 	free(self);
 
@@ -972,17 +973,55 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 	else if (pid == 0) {
 		/* forked here */
 
-		/* XXX fixme(debugger) */
-		char * argv[] = {
-			self->bexec,
-			test->suite->elf->name,
-			test->suite->setup,
-			test->suite->teardown,
-			test->function,
-			NULL
-		};
+		char * chunk;
+		size_t chunklen, pos;
+		char * env[16] = {NULL};
+		unsigned int e;
 		
-		dprintf(2, "CALL %s %s %s %s %s\n", argv[0], argv[1], argv[2], argv[3], argv[4]);
+		chunklen =
+			strlen(self->bexec) + 2
+			+ strlen("butcher_elf_name") + strlen(test->suite->elf->name) + 2
+			+ strlen("butcher_suite_setup") + strlen(test->suite->setup) + 2
+			+ strlen("butcher_suite_teardown") + strlen(test->suite->teardown) + 2
+			+ strlen("butcher_test_function") + strlen(test->function) + 2
+			+ strlen("butcher_verbose") + strlen("false") + 2
+			+ strlen("LD_LIBRARY_PATH") + strlen(getenv("LD_LIBRARY_PATH")) + 2
+			;
+
+		chunk = malloc(chunklen);
+		if (!chunk)
+			exit(-1);
+
+		pos = 0; e=0;
+		if (test->suite->elf->name) {
+			snprintf(chunk+pos, chunklen-pos, "butcher_elf_name=%s", test->suite->elf->name);
+			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		}
+
+		if (test->suite->setup) {
+			snprintf(chunk+pos, chunklen-pos, "butcher_suite_setup=%s", test->suite->setup);
+			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		}
+
+		if (test->suite->teardown) {
+			snprintf(chunk+pos, chunklen-pos, "butcher_suite_teardown=%s", test->suite->teardown);
+			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		}
+
+		if (test->function) {
+			snprintf(chunk+pos, chunklen-pos, "butcher_test_function=%s", test->function);
+			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		}
+	
+		snprintf(chunk+pos, chunklen-pos, "butcher_verbose=%s", self->verbose ? "true" : "false");
+		env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+	
+		if (getenv("LD_LIBRARY_PATH")) {
+			snprintf(chunk+pos, chunklen-pos, "LD_LIBRARY_PATH=%s", getenv("LD_LIBRARY_PATH"));
+			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		}
+
+		char * argv[] = { self->bexec };
 
 		/* redirect stdout */
 		close(pipeout[0]);
@@ -992,16 +1031,55 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 		
 		close(STDIN_FILENO);
 
-		argv[0]="bexec";
-		argv[1]=test->suite->elf->name;
-		argv[2]=test->suite->setup;
-		argv[3]=test->suite->teardown;
-		argv[4]=test->function;
-		argv[5]=NULL;
-
-		execve("bexec", argv, NULL);
+		execve(self->bexec, argv, env);
 		/* not reached */
-		dprintf(2, "could not call bexec");
+		dprintf(2, "could not call bexec\n");
+
+
+#if 0
+
+		/* XXX fixme(debugger) */
+		char * argv[] = {
+			self->bexec,
+			test->suite->elf->name,
+			test->suite->setup,
+			test->suite->teardown,
+			test->function,
+			NULL
+		};
+		char * lepath;
+		char * lpath = NULL;
+
+		lepath = getenv("LD_LIBRARY_PATH");
+		
+		if (lepath) {
+			size_t len = strlen(lepath) + 16 + 1 + 1;
+			lpath = alloca(len);
+			snprintf(lpath, len, "%s=%s", "LD_LIBRARY_PATH", lepath);
+		}
+		
+		char * envv[] = {
+			(self->verbose) ? "butcher_verbose=true" : "butcher_verbose=false",
+			lpath,
+			NULL
+		};
+		
+		if (self->verbose)
+			dprintf(2, "CALL %s %s %s %s %s\n", 
+				argv[0], argv[1], argv[2], argv[3], argv[4]);
+
+		/* redirect stdout */
+		close(pipeout[0]);
+		close(STDOUT_FILENO);
+		dup2(pipeout[1], STDOUT_FILENO);
+		close(pipeout[1]);
+		
+		close(STDIN_FILENO);
+
+		execve(self->bexec, argv, envv);
+		/* not reached */
+		dprintf(2, "could not call bexec\n");
+#endif
 		exit(-1);
 	} else {
 
@@ -1093,7 +1171,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 
 		if (WIFEXITED(status)) {
 			if (!rec.done)
-				return_error(EINVAL);
+				return_error(ENAVAIL);
 
 			for (int i = 0; i < BT_PASS_MAX; i++) {
 				test->results[i] = rec.results[i];
@@ -1107,6 +1185,9 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 					break;
 				}
 			}
+			char msg[32];
+			snprintf(msg, 32, "(exited with signal %d)", WTERMSIG(status));
+			bt_log_msgcpy(test->log, msg, -1);
 		}
 
 		return 0;

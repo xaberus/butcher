@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <dlfcn.h>
 
@@ -14,21 +15,45 @@ int main(int argc, char * argv[], char * env[])
 {
 	void * dl_handle;
 	void * object;
-	int result, test_result;
+	int result, test_result, verbose;
 
+	UNUSED_PARAM(argc);
+	UNUSED_PARAM(argv);
 
+	if (getenv("butcher_verbose")
+			&& strcmp(getenv("butcher_verbose"), "true") == 0)
+		verbose=1;
+
+#if 0
 	if (argc != 5) {
-		dprintf(2, "argc: %d != 5!\n", argc);
+		dprintf(STDERR_FILENO, "argc: %d != 5!\n", argc);
+		exit(-1);
+	}
+#endif
+
+	if (verbose) {
+		dprintf(STDERR_FILENO, "BEXEC here ( ENV: ");
+		for (int i = 0; env[i]; i++)
+			dprintf(STDERR_FILENO, "'%s' ", env[i]);
+		dprintf(STDERR_FILENO, ")\n");
+	}
+
+	char * dl_lib = getenv("butcher_elf_name");
+	char * dl_setup = getenv("butcher_suite_setup");
+	char * dl_teardown = getenv("butcher_suite_teardown");
+	char * dl_test = getenv("butcher_test_function");
+
+	if (!dl_lib) {
+		dprintf(STDERR_FILENO, "butcher_elf_name not set\n");
+		exit(-1);
+	}
+	if (!dl_test) {
+		dprintf(STDERR_FILENO, "butcher_test_function not set\n");
 		exit(-1);
 	}
 
-	char * dl_lib = argv[1];
-	char * dl_setup = argv[2];
-	char * dl_teardown = argv[3];
-	char * dl_test = argv[4];
-
 	if ((dl_handle = dlopen(dl_lib, RTLD_NOW)) == NULL) {
-		dprintf(2, "ERROR: dlopen returned %s\n", dlerror());
+		dprintf(STDERR_FILENO, "ERROR: dlopen returned %s\n", dlerror());
 		exit(-1);
 	}
 
