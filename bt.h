@@ -151,6 +151,16 @@ __bt_suite_##__sname##_test_##__tname(object)
 		} \
 	} while(0)
 
+#define bt_assert_str_equal(__actual, __expected) \
+	do { \
+		if (strcmp((__actual), (__expected)) != 0) { \
+			dprintf(STDOUT_FILENO, "%s:%s:%d: Assertion failed: expeced '%s' , got '%s' \n", \
+					__FILE__, __FUNCTION__, __LINE__, \
+					(__expected), (__actual)); \
+			return BT_RESULT_FAIL; \
+		} \
+	} while(0)
+
 
 #define bt_assert_int_equal(__actual, __expected) \
 	_bt_assert_type_equal(signed long int, "%ld", __actual, __expected, "", "")
