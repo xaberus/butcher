@@ -31,12 +31,14 @@ int main(int argc, char * argv[], char * env[])
 	}
 #endif
 
+#if 0
 	if (verbose) {
 		dprintf(STDERR_FILENO, "BEXEC here ( ENV: ");
 		for (int i = 0; env[i]; i++)
 			dprintf(STDERR_FILENO, "'%s' ", env[i]);
 		dprintf(STDERR_FILENO, ")\n");
 	}
+#endif
 
 	char * dl_lib = getenv("butcher_elf_name");
 	char * dl_setup = getenv("butcher_suite_setup");

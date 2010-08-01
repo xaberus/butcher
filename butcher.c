@@ -20,17 +20,31 @@ static const struct options {
 	unsigned int id;
 	const char * help;
 } options[] = {
-		{"match-suite",	's',	1,	1,	"run only tests in matched suites; <arg> is a regex (man 7 regex)"},
-		{"match-test",	't',	1,	2,	"run only matched tests; <arg> is a regex (man 7 regex)"},
-		{"verbose",		'v',	0,	3,	"be verbose"},
-		{"quiet",		'q',	0,	4,	"be quiet (default)"},
-		{"color",		'c',	0,	5,	"enable color output"},
-		{"no-color",	'n',	0,	6,	"disable color output (default)"},
-		{"descriptor",	'd',	1,	7,	"write to given descriptor instead of 1 (stdout)"},
-		{"list",		'l',	0,	8,	"do not run any tests, just dump all available tests"},
-		{"help",		'h',	0,	9,	"display this screen"},
-		{"usage",		0,		0,	10,	"display this screen"},
-		{"debugger",		'g',		1,	11,	"use <arg> as debugger for bexec, e.g. /usr/bin/valgrind"},
+		{"match-suite",	's',	1,	1,
+				"run only tests in matched suites; <arg> is a regex\n"
+				"as povided by the POSIX2 specification (man 7 regex)"},
+		{"match-test",	't',	1,	2,
+			"run only matched tests; <arg> is a regex"},
+		{"verbose",		'v',	0,	3,
+			"be verbose, repeat for descriptions and messages (in order)"},
+		{"quiet",		'q',	0,	4,
+			"be quiet (default)"},
+		{"color",		'c',	0,	5,
+			"enable color output"},
+		{"no-color",	'n',	0,	6,
+			"disable color output (default)"},
+		{"descriptor",	'd',	1,	7,
+			"write to given descriptor instead of 1 (stdout)"},
+		{"list",		'l',	0,	8,
+			"instead of running tests, just dump everything available"},
+		{"help",		'h',	0,	9,
+			"display this screen"},
+		{"usage",		0,		0,	10,
+			"display this screen"},
+		{"bexec",		'b',		1,	12,
+			"use <arg> as path to bexec, e.g. /usr/bin/bexec"},
+		{"debugger",		'g',		1,	11,
+			"use <arg> as debugger for bexec, e.g. /usr/bin/valgrind"},
 		{NULL,			0,		0,	0,	NULL}
 };
 
@@ -43,7 +57,7 @@ void usage(int fd)
 			"with the help of libelf and libdl. See \"bt.h\" for details.\n"
 			"\n"
 			"Usage: \n"
-			"	export LD_LIBRARY_PATH=<path-to link dependencies>\n"
+			"	export LD_LIBRARY_PATH=<path to link dependencies>\n"
 			"	butcher <options> <shared-objects>\n");
 	dprintf(fd,
 			"Options: \n");
@@ -57,13 +71,26 @@ void usage(int fd)
 		else
 			dprintf(fd,
 					"	--%s %s\n", options[idx].long_name, options[idx].need_arg?"<arg>":"");
-		dprintf(fd,
-				"		%s\n", options[idx].help);
+
+		const char * s = options[idx].help;
+		const char * e = NULL;
+
+		while (s && *s) {
+			e = strchr(s, '\n');
+			if (e) {
+				dprintf(fd,
+						"		%.*s\n", (int)(e-s), s);
+			} else {
+				dprintf(fd,
+						"		%s\n", s);
+			}
+			s = (e) ? e + 1 : NULL;
+		};
 	}
 
 	dprintf(fd,
 			"Example: \n"
-			"	butcher -cv -m '^ugly' -t '^important' libfoo.so libbar.so\n");
+			"	butcher -cv -s '^ugly' -t '^important' libfoo.so libbar.so\n");
 }
 
 int main(int argc, char * argv[], char * env[]) {
@@ -230,6 +257,8 @@ int main(int argc, char * argv[], char * env[]) {
 					help = 1; break;
 				case 11: /* debugger */
 					debugger = argument; break;
+				case 12: /* bexec */
+					bexec = strdup(argument); break;
 				default:
 					goto failure;
 			}
@@ -251,10 +280,14 @@ int main(int argc, char * argv[], char * env[]) {
 
 	paramv[paramc] = NULL;
 	
-	dprintf(fd, "#############################\n");
+	if (verbose)
+		dprintf(fd, "#############################\n");
 	dprintf(fd, "### The %sBUTCHER%s unit test ###\n",
 			color?"\x1b[1;31m":"", color?"\x1b[0m":"");
-	dprintf(fd, "#############################\n\n");
+	if (verbose) {
+		dprintf(fd, "#############################\n\n");
+		dprintf(fd, "\n");
+	}
 
 	if (smatch || tmatch)
 		dprintf(fd, "tests matching '%s' in suites matching '%s' are going to be loaded\n\n",

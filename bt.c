@@ -973,18 +973,21 @@ int bt_list(bt_t * self)
 
 	elf_cur = self->elfs;
 	while (elf_cur) {
-		dprintf(self->fd, "[%self%s, name='%s%s%s', dlhandle=%p]\n",
+		dprintf(self->fd, "[%self%s, name='%s%s%s']\n",
 				self->color?YELLOW:"", self->color?ENDCOL:"",
-				self->color?RED:"", elf_cur->name, self->color?ENDCOL:"",
-				elf_cur->dlhandle);
+				self->color?RED:"", elf_cur->name, self->color?ENDCOL:"");
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			if (self->descriptions)
+			if (self->verbose)
 				dprintf(self->fd, " [%ssuite%s, name='%s%s%s', setup=%s, teardown=%s]\n",
 						self->color?BLUE:"", self->color?ENDCOL:"",
 						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
 						suite_cur->setup, suite_cur->teardown);
+			else
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
 
 			test_cur = suite_cur->tests;
 			while (test_cur) {
@@ -1095,7 +1098,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
 		}
 	
-		snprintf(chunk+pos, chunklen-pos, "butcher_verbose=%s", self->verbose ? "true" : "false");
+		snprintf(chunk+pos, chunklen-pos, "butcher_verbose=%s", self->messages ? "true" : "false");
 		env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
 	
 		if (getenv("LD_LIBRARY_PATH")) {
@@ -1121,13 +1124,15 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			argv[1] = NULL;
 		}
 
-		if (self->verbose) {
+#if 1
+		if (self->messages) {
 			dprintf(STDERR_FILENO, "CALL ");
 			for (unsigned  int k = 0; k < argc; k++) {
 				dprintf(STDERR_FILENO, "%s ", argv[k]);
 			}
 			dprintf(STDERR_FILENO, "\n");
 		}
+#endif
 
 		/* redirect stdout */
 		close(pipeout[0]);
@@ -1135,11 +1140,12 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 		dup2(pipeout[1], STDOUT_FILENO);
 		close(pipeout[1]);
 		
-		close(STDIN_FILENO);
+		if (!self->debugger)
+			close(STDIN_FILENO);
 
 		execve(argv[0], argv, env);
 		/* not reached */
-		dprintf(2, "could not call bexec\n");
+		dprintf(self->fd, "could not call bexec\n");
 
 
 #if 0
@@ -1243,6 +1249,8 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			}
 		
 			length = read(pipeout[0], buffer + buffer_cur, bytes);
+			if (self->debugger)
+				dprintf(STDERR_FILENO, "%.*s", (int)bytes, buffer + buffer_cur);
 			buffer_cur += length;
 
 		} while(running);
@@ -1384,8 +1392,9 @@ int bt_report(bt_t * self)
 	unsigned int allresults[BT_TEST_MAX] = { 0 };
 	int allcount = 0;
 
-	dprintf(self->fd, "%slisting results for loaded objects%s (worst counts)...\n\n",
-			self->color?GREEN:"", self->color?ENDCOL:"");
+	if (self->verbose)
+		dprintf(self->fd, "%slisting results for loaded objects%s (worst counts)...\n\n",
+				self->color?GREEN:"", self->color?ENDCOL:"");
 
 	elf_cur = self->elfs;
 	while (elf_cur) {
@@ -1395,15 +1404,17 @@ int bt_report(bt_t * self)
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			if (self->descriptions)
-				dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
-						self->color?BLUE:"", self->color?ENDCOL:"",
-						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
-						self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
-			else
-				dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
-						self->color?BLUE:"", self->color?ENDCOL:"",
-						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
+			if(self->verbose) {
+				if (self->descriptions)
+					dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
+							self->color?BLUE:"", self->color?ENDCOL:"",
+							self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+							self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
+				else
+					dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
+							self->color?BLUE:"", self->color?ENDCOL:"",
+							self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
+			}
 
 			unsigned int results[BT_TEST_MAX] = { 0 };
 			int result;
@@ -1429,7 +1440,7 @@ int bt_report(bt_t * self)
 								self->color?RED:"", test_cur->name, self->color?ENDCOL:"");
 				}
 
-				if ((self->verbose || result > BT_TEST_SUCCEEDED) && test_cur->log) {
+				if ((self->messages || result > BT_TEST_SUCCEEDED) && test_cur->log) {
 					line_cur = test_cur->log->lines;
 					while (line_cur) {
 						if (result > BT_TEST_SUCCEEDED) {
@@ -1480,26 +1491,29 @@ int bt_report(bt_t * self)
 					}
 				}
 
-				if (self->messages || result > BT_TEST_SUCCEEDED) {
+				if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED) {
 					switch (result) {
 						case BT_TEST_SUCCEEDED:
-							dprintf(self->fd, " -> [%ssucceeded%s]\n", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
+							dprintf(self->fd, " -> [%ssucceeded%s]", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_IGNORED:
-							dprintf(self->fd, " -> [%signored%s]\n", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
+							dprintf(self->fd, " -> [%signored%s]", self->color?GREEN CYAN_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_FAILED:
-							dprintf(self->fd, " -> [%sfailed%s]\n", self->color?RED_BG:"", self->color?ENDCOL:""); break;
+							dprintf(self->fd, " -> [%sfailed%s]", self->color?RED_BG:"", self->color?ENDCOL:""); break;
 						case BT_TEST_CORRUPTED:
-							dprintf(self->fd, " -> [%scorrupted%s]\n", self->color?RED_BG:"", self->color?ENDCOL:""); break;
+							dprintf(self->fd, " -> [%scorrupted%s]", self->color?RED_BG:"", self->color?ENDCOL:""); break;
 						default:
 							break;
 					}
 				}
+				
+				if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED)
+					dprintf(self->fd, "\n");
 
 				if (result > BT_TEST_NONE) {
 					results[result]++;
 					count++;
 				}
-
+				
 				test_cur = test_cur->next;
 			}
 
@@ -1508,12 +1522,15 @@ int bt_report(bt_t * self)
 			}
 			allcount += count;
 
-			if (count)
-				dprintf(2, "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n\n",
+			if (count && self->messages)
+				dprintf(self->fd, "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
 						count, results[BT_TEST_SUCCEEDED], (double)results[BT_TEST_SUCCEEDED] / count * 100,
 						results[BT_TEST_IGNORED], (double)results[BT_TEST_IGNORED] / count * 100,
 						results[BT_TEST_FAILED], (double)results[BT_TEST_FAILED] / count * 100,
 						results[BT_TEST_CORRUPTED], (double)results[BT_TEST_CORRUPTED] / count * 100);
+
+			if (self->messages)
+				dprintf(self->fd, "  \n");
 
 			suite_cur = suite_cur->next;
 		}
@@ -1521,7 +1538,7 @@ int bt_report(bt_t * self)
 		elf_cur = elf_cur->next;
 	}
 
-	dprintf(2, " => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
+	dprintf(self->fd, " => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
 			allcount, allresults[BT_TEST_SUCCEEDED], (double)allresults[BT_TEST_SUCCEEDED] / allcount * 100,
 			allresults[BT_TEST_IGNORED], (double)allresults[BT_TEST_IGNORED] / allcount * 100,
 			allresults[BT_TEST_FAILED], (double)allresults[BT_TEST_FAILED] / allcount * 100,
