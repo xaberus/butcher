@@ -1235,8 +1235,12 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			if (err)
 				goto loop_io_failure;
 
-			if (buffer_length - buffer_cur < bytes)
+			if (buffer_length - buffer_cur < bytes) {
 				buffer_length_new = buffer_length * 2;
+				while (buffer_length_new - buffer_cur < bytes) {
+					buffer_length_new = buffer_length_new * 2;
+				}
+			}
 
 			if (!buffer || buffer_length != buffer_length_new) {
 				tmp = realloc(buffer, buffer_length_new + 1);
