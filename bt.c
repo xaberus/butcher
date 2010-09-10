@@ -816,6 +816,12 @@ int bt_tune(bt_t * self, unsigned int flags)
 	else
 		self->messages = 0;
 
+	if (flags & BT_FLAG_ENVDUMP)
+		self->envdump = 1;
+	else
+		self->envdump = 0;
+
+
 	return 0;
 }
 
@@ -1069,6 +1075,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			chunklen += strlen("butcher_test_function") + strlen(test->function) + 2;
 
 		chunklen += strlen("butcher_verbose") + strlen("false") + 2;
+		chunklen += strlen("butcher_envdump") + strlen("false") + 2;
 
 		if (getenv("LD_LIBRARY_PATH"))
 			chunklen += strlen("LD_LIBRARY_PATH") + strlen(getenv("LD_LIBRARY_PATH")) + 2;
@@ -1100,6 +1107,9 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 	
 		snprintf(chunk+pos, chunklen-pos, "butcher_verbose=%s", self->messages ? "true" : "false");
 		env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
+		
+		snprintf(chunk+pos, chunklen-pos, "butcher_envdump=%s", self->envdump ? "true" : "false");
+		env[e++] = chunk+pos; pos += strlen(chunk+pos) + 1;
 	
 		if (getenv("LD_LIBRARY_PATH")) {
 			snprintf(chunk+pos, chunklen-pos, "LD_LIBRARY_PATH=%s", getenv("LD_LIBRARY_PATH"));
@@ -1124,7 +1134,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 			argv[1] = NULL;
 		}
 
-#if 1
+#if 0
 		if (self->messages) {
 			dprintf(STDERR_FILENO, "CALL ");
 			for (unsigned  int k = 0; k < argc; k++) {
@@ -1408,17 +1418,15 @@ int bt_report(bt_t * self)
 
 		suite_cur = elf_cur->suites;
 		while (suite_cur) {
-			if(self->verbose) {
-				if (self->descriptions)
-					dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
-							self->color?BLUE:"", self->color?ENDCOL:"",
-							self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
-							self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
-				else
-					dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
-							self->color?BLUE:"", self->color?ENDCOL:"",
-							self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
-			}
+			if (self->descriptions)
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s', description='%s%s%s']\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"",
+						self->color?PURPLE:"", suite_cur->description, self->color?ENDCOL:"");
+			else
+				dprintf(self->fd, " [%ssuite%s, name='%s%s%s']\n",
+						self->color?BLUE:"", self->color?ENDCOL:"",
+						self->color?GREEN:"", suite_cur->name, self->color?ENDCOL:"");
 
 			unsigned int results[BT_TEST_MAX] = { 0 };
 			int result;
@@ -1526,7 +1534,7 @@ int bt_report(bt_t * self)
 			}
 			allcount += count;
 
-			if (count && self->messages)
+			if (count)
 				dprintf(self->fd, "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
 						count, results[BT_TEST_SUCCEEDED], (double)results[BT_TEST_SUCCEEDED] / count * 100,
 						results[BT_TEST_IGNORED], (double)results[BT_TEST_IGNORED] / count * 100,

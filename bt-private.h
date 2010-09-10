@@ -112,6 +112,7 @@ struct bt {
 	char verbose;
 	char descriptions;
 	char messages;
+	char envdump;
 	char initialized;
 
 	int fd;

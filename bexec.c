@@ -9,20 +9,44 @@
 
 #include "bt-private.h"
 
+#include <pthread.h>
+
 bt_tester_t tester;
+
+static inline
+int get_env_bool(const char * name, int def)
+{
+	int ret = def;
+	if (getenv(name)) {
+		if (strcmp(getenv(name), "true") == 0)
+			ret = 1;
+		if (strcmp(getenv(name), "TRUE") == 0)
+			ret = 1;
+		if (strcmp(getenv(name), "1") == 0)
+			ret = 1;
+		if (strcmp(getenv(name), "false") == 0)
+			ret = 0;
+		if (strcmp(getenv(name), "FALSE") == 0)
+			ret = 0;
+		if (strcmp(getenv(name), "0") == 0)
+			ret = 0;
+	}
+
+	return ret;
+}
 
 int main(int argc, char * argv[], char * env[]) 
 {
 	void * dl_handle;
 	void * object;
-	int result, test_result, verbose;
+	int result, test_result, verbose, envdump, unload;
 
 	UNUSED_PARAM(argc);
 	UNUSED_PARAM(argv);
 
-	if (getenv("butcher_verbose")
-			&& strcmp(getenv("butcher_verbose"), "true") == 0)
-		verbose=1;
+	verbose = get_env_bool("butcher_verbose", 0);
+	envdump = get_env_bool("butcher_envdump", 0);
+	unload = get_env_bool("butcher_unload", 1);
 
 #if 0
 	if (argc != 5) {
@@ -31,14 +55,14 @@ int main(int argc, char * argv[], char * env[])
 	}
 #endif
 
-#if 0
-	if (verbose) {
-		dprintf(STDERR_FILENO, "BEXEC here ( ENV: ");
+	if (envdump) {
+		dprintf(STDERR_FILENO, "BEXEC here ( env -i ");
 		for (int i = 0; env[i]; i++)
 			dprintf(STDERR_FILENO, "'%s' ", env[i]);
+		for (int i = 0; argv[i]; i++)
+			dprintf(STDERR_FILENO, "'%s' ", argv[i]);
 		dprintf(STDERR_FILENO, ")\n");
 	}
-#endif
 
 	char * dl_lib = getenv("butcher_elf_name");
 	char * dl_setup = getenv("butcher_suite_setup");
@@ -150,5 +174,7 @@ int main(int argc, char * argv[], char * env[])
 
 	close(tester.fd);
 
-	dlclose(dl_handle);
+	if (unload)
+		dlclose(dl_handle);
+	pthread_exit(NULL);
 }

@@ -1,6 +1,6 @@
 
 CCFLAGS=-std=c99 -Wall -Wextra -pedantic -D_GNU_SOURCE -g -ggdb
-LDFLAGS=-lelf -ldl -Wl,-rpath,. -rdynamic
+LDFLAGS=-lelf -ldl -Wl,-rpath,. -rdynamic -pthread
 INCLUDES=-I .
 CC=gcc
 

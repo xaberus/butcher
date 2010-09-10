@@ -32,7 +32,7 @@ static const struct options {
 		{"color",		'c',	0,	5,
 			"enable color output"},
 		{"no-color",	'n',	0,	6,
-			"disable color output (default)"},
+			"disable color output"},
 		{"descriptor",	'd',	1,	7,
 			"write to given descriptor instead of 1 (stdout)"},
 		{"list",		'l',	0,	8,
@@ -124,7 +124,7 @@ int main(int argc, char * argv[], char * env[]) {
 	list = 0;
 	help = 0;
 	verbose = 0;
-	color = 0;
+	color = 1;
 	shortflag = 0;
 	bexec = NULL;
 	debugger = NULL;
@@ -330,6 +330,7 @@ int main(int argc, char * argv[], char * env[]) {
 				((verbose>=1) ? BT_FLAG_VERBOSE:0) |
 				((verbose>=2) ? BT_FLAG_DESCRIPTIONS:0) |
 				((verbose>=3) ? BT_FLAG_MESSAGES:0) |
+				((verbose>=4) ? BT_FLAG_ENVDUMP:0) |
 				(color ? BT_FLAG_COLOR:0)
 			);
 	if (err)
