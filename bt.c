@@ -70,7 +70,7 @@ int bt_log_line_new(bt_log_line_t ** line, const char * msg, ssize_t len)
 	if (len < 0 && msg)
 		len = strlen(msg);
 
-	if (len <= 0)
+	if (len < 0)
 		return_error(EINVAL);
 
 	self = malloc(sizeof(bt_log_line_t) + len + 1);
