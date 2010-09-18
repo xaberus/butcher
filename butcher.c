@@ -13,39 +13,91 @@
  * how the API of butcher should look like.
  */
 
+enum butcher_opt {
+  OPT_ERROR = 0,
+  OPT_MATCH_SUITE,
+  OPT_MATCH_TEST,
+  OPT_VERBOSE,
+  OPT_QUIET,
+  OPT_COLOR,
+  OPT_NOCOLOR,
+  OPT_DESCRIPTOR,
+  OPT_LIST,
+  OPT_HELP,
+  OPT_USAGE,
+  OPT_BEXEC,
+  OPT_DEBUGGER,
+};
+
 static const struct options {
+  enum butcher_opt id;
   const char * long_name;
   char short_name;
   char need_arg;
-  unsigned int id;
   const char * help;
 } options[] = {
-  {"match-suite", 's', 1, 1,
-   "run only tests in matched suites; <arg> is a regex\n"
-   "as povided by the POSIX2 specification (man 7 regex)"},
-  {"match-test", 't', 1, 2,
-   "run only matched tests; <arg> is a regex"},
-  {"verbose", 'v', 0, 3,
-   "be verbose, repeat for descriptions and messages (in order)"},
-  {"quiet", 'q', 0, 4,
-   "be quiet (default)"},
-  {"color", 'c', 0, 5,
-   "enable color output"},
-  {"no-color", 'n', 0, 6,
-   "disable color output"},
-  {"descriptor", 'd', 1, 7,
-   "write to given descriptor instead of 1 (stdout)"},
-  {"list", 'l', 0, 8,
-   "instead of running tests, just dump everything available"},
-  {"help", 'h', 0, 9,
-   "display this screen"},
-  {"usage", 0, 0, 10,
-   "display this screen"},
-  {"bexec", 'b', 1, 12,
-   "use <arg> as path to bexec, e.g. /usr/bin/bexec"},
-  {"debugger", 'g', 1, 11,
-   "use <arg> as debugger for bexec, e.g. /usr/bin/valgrind"},
-  {NULL, 0, 0, 0, NULL}
+  {OPT_MATCH_SUITE,
+    .long_name = "match-suite",
+    .short_name = 's', .need_arg = 1,
+    .help = "run only tests in matched suites; <arg> is a regex\n"
+      "as povided by the POSIX2 specification (man 7 regex)"
+  },
+  {OPT_MATCH_TEST,
+    .long_name = "match-test", 
+    .short_name = 't', .need_arg = 1,
+    .help = "run only matched tests; <arg> is a regex"
+  },
+  {OPT_VERBOSE,
+    .long_name = "verbose", 
+    .short_name = 'v', .need_arg = 0,
+    .help = "be verbose, repeat for descriptions and messages (in order)"
+  },
+  {OPT_QUIET,
+    .long_name = "quiet", 
+    .short_name = 'q', .need_arg = 0,
+    .help = "be quiet (default)"
+  },
+  {OPT_COLOR,
+    .long_name = "color", 
+    .short_name = 'c', .need_arg = 0,
+    .help = "enable color output"
+  },
+  {OPT_NOCOLOR,
+    .long_name = "no-color", 
+    .short_name = 'n', .need_arg = 0,
+    .help = "disable color output"
+  },
+  {OPT_DESCRIPTOR,
+    .long_name = "descriptor", 
+    .short_name = 'd', .need_arg = 1,
+    .help = "write to given descriptor instead of 1 (stdout)"
+  },
+  {OPT_LIST,
+    .long_name = "list", 
+    .short_name = 'l', .need_arg = 0,
+    .help = "instead of running tests, just dump everything available"
+  },
+  {OPT_HELP,
+    .long_name = "help", 
+    .short_name = 'h', .need_arg = 0,
+    .help = "display this screen"
+  },
+  {OPT_USAGE,
+    .long_name = "usage", 
+    .short_name = 0, .need_arg = 0,
+    .help = "display this screen"
+  },
+  {OPT_BEXEC,
+    .long_name = "bexec", 
+    .short_name = 'b', .need_arg = 1,
+    .help = "use <arg> as path to bexec, e.g. /usr/bin/bexec"
+  },
+  {OPT_DEBUGGER,
+    .long_name = "debugger", 
+    .short_name = 'g', .need_arg = 1,
+    .help = "use <arg> as debugger for bexec, e.g. /usr/bin/valgrind"
+  },
+  {OPT_ERROR, NULL, 0, 0, NULL}
 };
 
 void usage(int fd)
@@ -242,28 +294,28 @@ next_flag: {
 
 handle_opt: {
       switch (options[idx].id) {
-        case 1: /* match-suite */
+        case OPT_MATCH_SUITE:
           smatch = argument; break;
-        case 2: /* match-test */
+        case OPT_MATCH_TEST:
           tmatch = argument; break;
-        case 3: /* verbose */
+        case OPT_VERBOSE:
           verbose++; break;
-        case 4: /* quiet */
+        case OPT_QUIET:
           verbose = 0; break;
-        case 5: /* color */
+        case OPT_COLOR:
           color = 1; break;
-        case 6: /* no-color */
+        case OPT_NOCOLOR:
           color = 0; break;
-        case 7: /* descriptor */
+        case OPT_DESCRIPTOR:
           fd = atoi(argument); break;
-        case 8: /* list */
+        case OPT_LIST:
           list = 1; break;
-        case 9: /* help */
-        case 10: /* usage */
+        case OPT_HELP:
+        case OPT_USAGE:
           help = 1; break;
-        case 11: /* debugger */
+        case OPT_DEBUGGER:
           debugger = argument; break;
-        case 12: /* bexec */
+        case OPT_BEXEC:
           bexec = strdup(argument); break;
         default:
           goto failure;
