@@ -36,6 +36,7 @@ typedef struct bt_tester bt_tester_t;
 
 #define BT_SETUP_FUNCTION_ARGS void ** object
 #define BT_TEST_FUNCTION_ARGS void * object
+#define BT_PLAIN_FUNCTION_ARGS
 
 typedef int (bt_setup_function_t)(BT_SETUP_FUNCTION_ARGS);
 typedef int (bt_test_function_t)(BT_TEST_FUNCTION_ARGS);
@@ -108,6 +109,10 @@ int __bt_suite_##__sname##_teardown(BT_SETUP_FUNCTION_ARGS)
 #define BT_TEST_DEF(__sname, __tname, __tdesc) \
 const char __bt_suite_##__sname##_test_##__tname##_descr[] = __tdesc; \
 int __bt_suite_##__sname##_test_##__tname(BT_TEST_FUNCTION_ARGS)
+
+#define BT_TEST_DEF_PLAIN(__sname, __tname, __tdesc) \
+const char __bt_suite_##__sname##_test_##__tname##_descr[] = __tdesc; \
+int __bt_suite_##__sname##_test_##__tname(BT_PLAIN_FUNCTION_ARGS)
 
 #define BT_TEST(__sname, __tname) \
 __bt_suite_##__sname##_test_##__tname(object)
