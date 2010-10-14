@@ -12,7 +12,6 @@
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <sys/ioctl.h>
 
 #include <libelf.h>
@@ -1238,7 +1237,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
     do {
       usleep(100);
 
-      waitret = waitpid(pid, &status, WNOHANG);
+      waitret = wait4(pid, &status, WNOHANG, &test->ru);
       if (waitret == -1)
         goto loop_wait_fail;
 
@@ -1469,8 +1468,28 @@ int bt_report(bt_t * self)
           }
         }
 
-        if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED)
+        if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED) {
+          dprintf(self->fd, "   U+S:%lu U:%lu S:%lu MRSS:%ld IXRSS:%ld DU:%ld SU:%ld SPF:%ld PF:%ld SW:%ld OI:%ld OO:%ld MS:%ld MR:%ld SD:%ld\n", 
+            (unsigned long)(test_cur->ru.ru_utime.tv_sec * 1000000) + test_cur->ru.ru_utime.tv_usec
+              + (unsigned long)(test_cur->ru.ru_stime.tv_sec * 1000000) + test_cur->ru.ru_stime.tv_usec,
+            (unsigned long)(test_cur->ru.ru_utime.tv_sec * 1000000) + test_cur->ru.ru_utime.tv_usec,
+            (unsigned long)(test_cur->ru.ru_stime.tv_sec * 1000000) + test_cur->ru.ru_stime.tv_usec,
+            test_cur->ru.ru_maxrss,
+            test_cur->ru.ru_ixrss,
+            test_cur->ru.ru_idrss,
+            test_cur->ru.ru_isrss,
+            test_cur->ru.ru_minflt,
+            test_cur->ru.ru_majflt,
+            test_cur->ru.ru_nswap,
+            test_cur->ru.ru_inblock,
+            test_cur->ru.ru_oublock,
+            test_cur->ru.ru_msgsnd,
+            test_cur->ru.ru_msgrcv,
+            test_cur->ru.ru_nsignals
+          );
+
           dprintf(self->fd, "   -> results: ");
+        }
 
         if (self->messages || result > BT_TEST_SUCCEEDED) {
           for (int i = 0, flag = 0; i < BT_PASS_MAX; i++) {

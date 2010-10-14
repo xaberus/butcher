@@ -4,23 +4,24 @@
 #define BTPRIVATE_H_
 
 #include "bt.h"
-
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include <regex.h>
 
 enum {
-	BT_PASS_SETUP = 0, /* enable array access */
-	BT_PASS_TEST,
-	BT_PASS_TEARDOWN,
-	BT_PASS_MAX, /* define array size */
+  BT_PASS_SETUP = 0, /* enable array access */
+  BT_PASS_TEST,
+  BT_PASS_TEARDOWN,
+  BT_PASS_MAX, /* define array size */
 };
 
 enum {
-	BT_TEST_NONE = -1,
-	BT_TEST_SUCCEEDED = 0,
-	BT_TEST_FAILED,
-	BT_TEST_IGNORED,
-	BT_TEST_CORRUPTED,
-	BT_TEST_MAX
+  BT_TEST_NONE = -1,
+  BT_TEST_SUCCEEDED = 0,
+  BT_TEST_FAILED,
+  BT_TEST_IGNORED,
+  BT_TEST_CORRUPTED,
+  BT_TEST_MAX
 };
 
 typedef struct bt_log_line bt_log_line_t;
@@ -33,8 +34,8 @@ typedef struct bt_elf bt_elf_t;
  * variable sized C9x structure holding a read-only message
  */
 struct bt_log_line {
-	struct bt_log_line * next;
-	char contents[];
+  struct bt_log_line * next;
+  char contents[];
 };
 
 /*
@@ -42,8 +43,8 @@ struct bt_log_line {
  * to the last for easy appending
  */
 struct bt_log {
-	struct bt_log_line * lines;
-	struct bt_log_line * last;
+  struct bt_log_line * lines;
+  struct bt_log_line * last;
 };
 
 /*
@@ -55,16 +56,18 @@ struct bt_log {
  *  - a name of the test case
  */
 struct bt_test {
-	struct bt_test * next;
-	bt_suite_t * suite;
+  struct bt_test * next;
+  bt_suite_t * suite;
 
-	char * name;
-	char * description;
+  char * name;
+  char * description;
 
-	char results[BT_PASS_MAX];
-	bt_log_t * log;
+  char results[BT_PASS_MAX];
+  bt_log_t * log;
 
-	char * function;
+  char * function;
+
+  struct rusage ru;
 };
 
 /*
@@ -74,16 +77,16 @@ struct bt_test {
  *  - a list of test cases
  */
 struct bt_suite {
-	struct bt_suite * next;
-	bt_elf_t * elf;
+  struct bt_suite * next;
+  bt_elf_t * elf;
 
-	bt_test_t * tests;
+  bt_test_t * tests;
 
-	char * name;
-	char * description;
+  char * name;
+  char * description;
 
-	char * setup;
-	char * teardown;
+  char * setup;
+  char * teardown;
 };
 
 /*
@@ -92,14 +95,14 @@ struct bt_suite {
  * derived from test declarations
  */
 struct bt_elf {
-	struct bt_elf * next;
-	bt_t * butcher;
+  struct bt_elf * next;
+  bt_t * butcher;
 
-	bt_suite_t * suites;
+  bt_suite_t * suites;
 
-	char * name;
+  char * name;
 
-	void * dlhandle;
+  void * dlhandle;
 };
 
 /*
@@ -107,26 +110,26 @@ struct bt_elf {
  *  - a list of shared objects (to chop)
  */
 struct bt {
-	bt_elf_t * elfs;
-	char color;
-	char verbose;
-	char descriptions;
-	char messages;
-	char envdump;
-	char initialized;
+  bt_elf_t * elfs;
+  char color;
+  char verbose;
+  char descriptions;
+  char messages;
+  char envdump;
+  char initialized;
 
-	int fd;
-	
-	char * bexec;
-	char ** debugger;
-	unsigned int debugger_nargs;
+  int fd;
 
-	regex_t sregex, tregex;
+  char * bexec;
+  char ** debugger;
+  unsigned int debugger_nargs;
+
+  regex_t sregex, tregex;
 };
 
 struct result_rec {
-	char magic[5];
-	char results[BT_PASS_MAX];
-	char done;
+  char magic[5];
+  char results[BT_PASS_MAX];
+  char done;
 };
 #endif /* BTPRIVATE_H_ */
