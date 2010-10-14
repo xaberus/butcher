@@ -39,7 +39,7 @@ int main(int argc, char * argv[], char * env[])
 {
   void * dl_handle;
   void * object;
-  int    result, test_result, verbose, envdump, unload;
+  int    result, test_result, verbose, envdump, unload, wres;
 
   UNUSED_PARAM(argc);
   UNUSED_PARAM(argv);
@@ -111,6 +111,11 @@ int main(int argc, char * argv[], char * env[])
   tester.fd = STDOUT_FILENO;
   close(STDIN_FILENO);
 
+  if (isatty(tester.fd))
+    wres = 0;
+  else
+    wres = 1;
+
   struct result_rec rec = {
     "\x01\x02\x03\x04",
     {BT_TEST_NONE, BT_TEST_NONE, BT_TEST_NONE},
@@ -131,8 +136,10 @@ int main(int argc, char * argv[], char * env[])
     rec.results[BT_PASS_SETUP] = BT_TEST_NONE;
   }
 
-  write(tester.fd, "\0", 1);
-  write(tester.fd, &rec, sizeof(struct result_rec));
+  if (wres) {
+    write(tester.fd, "\0", 1);
+    write(tester.fd, &rec, sizeof(struct result_rec));
+  }
 
   /* does not make much sense to run the test if setup has failed */
   if (result <= BT_TEST_SUCCEEDED) {
@@ -147,8 +154,10 @@ int main(int argc, char * argv[], char * env[])
     else
       rec.results[BT_PASS_TEST] = BT_TEST_CORRUPTED;
 
-    write(tester.fd, "\0", 1);
-    write(tester.fd, &rec, sizeof(struct result_rec));
+    if (wres) {
+      write(tester.fd, "\0", 1);
+      write(tester.fd, &rec, sizeof(struct result_rec));
+    }
   }
 
   if (result <= BT_TEST_SUCCEEDED) {
@@ -161,16 +170,20 @@ int main(int argc, char * argv[], char * env[])
       else if (result == BT_RESULT_FAIL)
         rec.results[BT_PASS_TEARDOWN] = BT_TEST_FAILED;
 
-      write(tester.fd, "\0", 1);
-      write(tester.fd, &rec, sizeof(struct result_rec));
+      if (wres) {
+        write(tester.fd, "\0", 1);
+        write(tester.fd, &rec, sizeof(struct result_rec));
+      }
     }
   }
 
   /* we are done */
   rec.done = 1;
 
-  write(tester.fd, "\0", 1);
-  write(tester.fd, &rec, sizeof(struct result_rec));
+  if (wres) {
+    write(tester.fd, "\0", 1);
+    write(tester.fd, &rec, sizeof(struct result_rec));
+  }
 
   close(tester.fd);
 
