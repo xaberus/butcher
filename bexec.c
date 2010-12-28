@@ -111,10 +111,11 @@ int main(int argc, char * argv[], char * env[])
   tester.fd = STDOUT_FILENO;
   close(STDIN_FILENO);
 
-  if (isatty(tester.fd))
+  wres = get_env_bool("butcher_wres", 1);
+
+  /* do not write control strings to terminal */
+  if (wres && isatty(tester.fd))
     wres = 0;
-  else
-    wres = 1;
 
   struct result_rec rec = {
     "\x01\x02\x03\x04",
