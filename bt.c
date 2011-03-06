@@ -1586,12 +1586,13 @@ int bt_report(bt_t * self)
       }
       allcount += count;
 
-      if (count)
+      if (count) {
+        int choice = results[BT_TEST_IGNORED] + results[BT_TEST_FAILED] == 0;
         dprintf(
             self->fd,
-            "  => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
-            count,
-            results[BT_TEST_SUCCEEDED],
+            "  => %s%d%s/%d test%s succeeded (%g%%) [%d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)]\n",
+            choice ? GREEN : RED, results[BT_TEST_SUCCEEDED], ENDCOL,
+            count, count <= 1 ? "" : "s",
             (double) results[BT_TEST_SUCCEEDED] / count * 100,
             results[BT_TEST_IGNORED],
             (double) results[BT_TEST_IGNORED] / count * 100,
@@ -1599,7 +1600,7 @@ int bt_report(bt_t * self)
             (double) results[BT_TEST_FAILED] / count * 100,
             results[BT_TEST_CORRUPTED],
             (double) results[BT_TEST_CORRUPTED] / count * 100);
-
+      }
       if (self->messages)
         dprintf(self->fd, "  \n");
 
@@ -1609,18 +1610,21 @@ int bt_report(bt_t * self)
     elf_cur = elf_cur->next;
   }
 
-  dprintf(
-      self->fd,
-      " => %d tests, %d succeeded (%g%%), %d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)\n",
-      allcount,
-      allresults[BT_TEST_SUCCEEDED],
-      (double) allresults[BT_TEST_SUCCEEDED] / allcount * 100,
-      allresults[BT_TEST_IGNORED],
-      (double) allresults[BT_TEST_IGNORED] / allcount * 100,
-      allresults[BT_TEST_FAILED],
-      (double) allresults[BT_TEST_FAILED] / allcount * 100,
-      allresults[BT_TEST_CORRUPTED],
-      (double) allresults[BT_TEST_CORRUPTED] / allcount * 100);
+  {
+    int choice = allresults[BT_TEST_IGNORED] + allresults[BT_TEST_FAILED] == 0;
+    dprintf(
+        self->fd,
+        " => %s%d%s/%d test%s succeeded (%g%%) [%d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)]\n",
+        choice ? GREEN : RED, allresults[BT_TEST_SUCCEEDED], ENDCOL,
+        allcount, allcount <= 1 ? "" : "s",
+        (double) allresults[BT_TEST_SUCCEEDED] / allcount * 100,
+        allresults[BT_TEST_IGNORED],
+        (double) allresults[BT_TEST_IGNORED] / allcount * 100,
+        allresults[BT_TEST_FAILED],
+        (double) allresults[BT_TEST_FAILED] / allcount * 100,
+        allresults[BT_TEST_CORRUPTED],
+        (double) allresults[BT_TEST_CORRUPTED] / allcount * 100);
+  }
 
   return 0;
 }
