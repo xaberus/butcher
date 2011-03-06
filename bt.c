@@ -1591,7 +1591,7 @@ int bt_report(bt_t * self)
         dprintf(
             self->fd,
             "  => %s%d%s/%d test%s succeeded (%g%%) [%d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)]\n",
-            choice ? GREEN : RED, results[BT_TEST_SUCCEEDED], ENDCOL,
+            self->color ? (choice ? GREEN : RED) : "", results[BT_TEST_SUCCEEDED], self->color ? ENDCOL : "",
             count, count <= 1 ? "" : "s",
             (double) results[BT_TEST_SUCCEEDED] / count * 100,
             results[BT_TEST_IGNORED],
@@ -1615,7 +1615,7 @@ int bt_report(bt_t * self)
     dprintf(
         self->fd,
         " => %s%d%s/%d test%s succeeded (%g%%) [%d ignored (%g%%), %d failed (%g%%), %d corrupted (%g%%)]\n",
-        choice ? GREEN : RED, allresults[BT_TEST_SUCCEEDED], ENDCOL,
+        self->color ? (choice ? GREEN : RED) : "", allresults[BT_TEST_SUCCEEDED], self->color ? ENDCOL : "",
         allcount, allcount <= 1 ? "" : "s",
         (double) allresults[BT_TEST_SUCCEEDED] / allcount * 100,
         allresults[BT_TEST_IGNORED],
