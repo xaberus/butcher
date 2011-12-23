@@ -135,7 +135,7 @@ BAPI int bt_delete(bt_t ** butcher);
   do { \
     if (!(__expr)) { \
       dprintf(STDOUT_FILENO, \
-          "%s:%s:%d: Assertion " # __expr "failed\n", \
+          "%s:%s:%d: Assertion " # __expr " failed\n", \
           __FILE__, \
           __FUNCTION__, \
           __LINE__); \
@@ -157,11 +157,13 @@ BAPI int bt_delete(bt_t ** butcher);
 
 #define _bt_assert_type_not_equal(__type, __fmt, __actual, __expected, __not, __extra) \
   do { \
-    if (((__actual) == (__expected))) { \
+    __type act = (__actual); \
+    __type exp = (__expected);\
+    if (((act) == (exp))) { \
       dprintf(STDOUT_FILENO, "%s:%s:%d: Assertion failed: expeced " # __actual \
           " to be " __not __fmt ", got " __fmt __extra "\n", \
           __FILE__, __FUNCTION__, __LINE__, \
-          (__type) __expected, (__type) __actual); \
+          (__type) exp, (__type) act); \
       return BT_RESULT_FAIL; \
     } \
   } while (0)
