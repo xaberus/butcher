@@ -1469,7 +1469,7 @@ int bt_report(bt_t * self)
         }
 
         if ((self->verbose && result > BT_TEST_NONE) || result > BT_TEST_SUCCEEDED) {
-          dprintf(self->fd, "   U+S:%lu U:%lu S:%lu MRSS:%ld IXRSS:%ld DU:%ld SU:%ld SPF:%ld PF:%ld SW:%ld OI:%ld OO:%ld MS:%ld MR:%ld SD:%ld\n", 
+          dprintf(self->fd, "   U+S:%lu U:%lu S:%lu MRSS:%ld IXRSS:%ld DU:%ld SU:%ld SPF:%ld PF:%ld SW:%ld OI:%ld OO:%ld MS:%ld MR:%ld SD:%ld\n",
             (unsigned long)(test_cur->ru.ru_utime.tv_sec * 1000000) + test_cur->ru.ru_utime.tv_usec
               + (unsigned long)(test_cur->ru.ru_stime.tv_sec * 1000000) + test_cur->ru.ru_stime.tv_usec,
             (unsigned long)(test_cur->ru.ru_utime.tv_sec * 1000000) + test_cur->ru.ru_utime.tv_usec,
