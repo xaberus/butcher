@@ -48,13 +48,6 @@ int main(int argc, char * argv[], char * env[])
   envdump = get_env_bool("butcher_envdump", 0);
   unload = get_env_bool("butcher_unload", 1);
 
-#if 0
-  if (argc != 5) {
-    dprintf(STDERR_FILENO, "argc: %d != 5!\n", argc);
-    exit(-1);
-  }
-#endif
-
   if (envdump) {
     dprintf(STDERR_FILENO, "BEXEC here ( env -i ");
     for (int i = 0; env[i]; i++)
