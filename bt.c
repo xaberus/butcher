@@ -1039,22 +1039,35 @@ int bt_chopper(bt_t * self, bt_test_t * test)
   int   err;
 
   int   pipeout[2];
+  int   cntlout[2];
 
-  if (!self || !self->initialized || !test)
+  if (!self || !self->initialized || !test) {
+    dprintf(self->fd, "no self, not initialized or no test!\n");
     return_error(EINVAL);
+  }
 
   err = bt_log_new(&test->log);
-  if (err)
+  if (err) {
+    dprintf(self->fd, "could not create ne log\n");
     return_error(err);
+  }
 
-  pipe2(pipeout, O_NONBLOCK);
+  if (pipe2(pipeout, O_NONBLOCK)) {
+    dprintf(self->fd, "could not create control pipe\n");
+    return_error(errno);
+  }
+  if (pipe2(cntlout, O_NONBLOCK)) {
+    dprintf(self->fd, "could not create log pipe\n");
+    return_error(errno);
+  }
+
+  dprintf(self->fd, "running suite '%s', test '%s'...\r", test->suite->name, test->name);
 
   pid = fork();
-  if (pid == -1)
+  if (pid == -1) {
     return_error(ENAVAIL);
-  else if (pid == 0) {
+  } else if (pid == 0) {
     /* forked here */
-
     char       * chunk;
     size_t       chunklen, pos;
     char       * env[16] = {NULL};
@@ -1108,6 +1121,9 @@ int bt_chopper(bt_t * self, bt_test_t * test)
       env[e++] = chunk + pos; pos += strlen(chunk + pos) + 1;
     }
 
+    snprintf(chunk + pos, chunklen - pos, "butcher_cfd=%d", cntlout[1]);
+    env[e++] = chunk + pos; pos += strlen(chunk + pos) + 1;
+
     snprintf(chunk + pos, chunklen - pos, "butcher_verbose=%s", self->messages ? "true" : "false");
     env[e++] = chunk + pos; pos += strlen(chunk + pos) + 1;
 
@@ -1152,6 +1168,8 @@ int bt_chopper(bt_t * self, bt_test_t * test)
     close(STDOUT_FILENO);
     dup2(pipeout[1], STDOUT_FILENO);
     close(pipeout[1]);
+
+    close(cntlout[0]); /* close read end of control stream */
 
     if (!self->debugger)
       close(STDIN_FILENO);
@@ -1207,7 +1225,6 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 #endif
     exit(-1);
   } else {
-
     struct result_rec rec = {
       "\x01\x02\x03\x04",
       {BT_TEST_NONE, BT_TEST_NONE, BT_TEST_NONE},
@@ -1224,7 +1241,8 @@ int bt_chopper(bt_t * self, bt_test_t * test)
     pid_t             waitret;
     int               running;
 
-    close(pipeout[1]);
+    close(pipeout[1]); /* close write end of log stream */
+    close(cntlout[1]); /* close write end of control stream */
 
     buffer = NULL;
     buffer_length = 512;
@@ -1243,6 +1261,13 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 
       if (waitret == pid)
         running = 0;
+
+      err = ioctl(cntlout[0], FIONREAD, &bytes);
+      if (err)
+        goto loop_io_failure;
+      for (size_t n = 0; n < bytes; n+= sizeof(rec)) {
+        read(cntlout[0], &rec, sizeof(rec));
+      }
 
       err = ioctl(pipeout[0], FIONREAD, &bytes);
       if (err)
@@ -1272,40 +1297,48 @@ int bt_chopper(bt_t * self, bt_test_t * test)
 
     } while (running);
 
-    close(pipeout[0]);
+    close(pipeout[0]); /* close read end of log stream */
+    close(pipeout[0]); /* close read end of control stream */
 
     /* terminate the buffer */
     buffer[buffer_cur] = '\0';
 
     i = 0;
     while (i < buffer_cur) {
-      for (n = i; n < buffer_cur && (c = buffer[n]) != '\n' && c != '\0'; n++) ;
-      switch (c) {
-        case '\n':
-          err = bt_log_msgcpy(test->log, buffer + i, n - i);
-          if (err)
-            goto parse_failure;
-          i = n + 1;
-          break;
-        default:
-          if (buffer_cur > i && buffer_cur - i > sizeof(struct result_rec)) {
-            if (strcmp(buffer + i + 1, rec.magic) == 0) {
-              memcpy(&rec, buffer + i + 1, sizeof(struct result_rec));
-            }
-          }
-          i = n + sizeof(struct result_rec) + 1;
-          break;
-      }
+      for (n = i; n < buffer_cur && (c = buffer[n]) != '\n' && c != '\r' && c != '\0'; n++) ;
+      err = bt_log_msgcpy(test->log, buffer + i, n - i);
+      if (err)
+        goto parse_failure;
+      i = n + 1;
     }
 
     free(buffer);
 
     if (WIFEXITED(status)) {
-      if (!rec.done)
-        return_error(ENAVAIL);
+      if (!rec.done) {
+        for (int i = 0; i < BT_PASS_MAX; i++) {
+          test->results[i] = BT_TEST_CORRUPTED;
+        }
+        char msg[32];
+        snprintf(msg, 32, "(test was aborted)");
+        bt_log_msgcpy(test->log, msg, -1);
+        dprintf(self->fd, "running suite '%s', test '%s'... aborted (how could that happen?!)\n",
+          test->suite->name, test->name);
+        return 0;
+      }
 
+      dprintf(self->fd, "running suite '%s', test '%s'... ", test->suite->name, test->name);
+      int max = BT_TEST_NONE;
       for (int i = 0; i < BT_PASS_MAX; i++) {
         test->results[i] = rec.results[i];
+        if (max < test->results[i]) {
+          max = test->results[i];
+        }
+      }
+      if (max == BT_TEST_SUCCEEDED) {
+        dprintf(self->fd, "passed\n");
+      } else {
+        dprintf(self->fd, "failed\n");
       }
     } else if (WIFSIGNALED(status)) {
       for (int i = 0; i < BT_PASS_MAX; i++) {
@@ -1319,6 +1352,7 @@ int bt_chopper(bt_t * self, bt_test_t * test)
       char msg[32];
       snprintf(msg, 32, "(exited with signal %d)", WTERMSIG(status));
       bt_log_msgcpy(test->log, msg, -1);
+      dprintf(self->fd, "running suite '%s', test '%s'... signaled!", test->suite->name, test->name);
     }
 
     return 0;

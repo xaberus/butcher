@@ -61,6 +61,7 @@ int main(int argc, char * argv[], char * env[])
   char * dl_setup = getenv("butcher_suite_setup");
   char * dl_teardown = getenv("butcher_suite_teardown");
   char * dl_test = getenv("butcher_test_function");
+  char * cfd = getenv("butcher_cfd");
 
   if (!dl_lib) {
     dprintf(STDERR_FILENO, "butcher_elf_name not set\n");
@@ -74,6 +75,10 @@ int main(int argc, char * argv[], char * env[])
   if ((dl_handle = dlopen(dl_lib, RTLD_NOW)) == NULL) {
     dprintf(STDERR_FILENO, "ERROR: dlopen returned %s\n", dlerror());
     exit(-1);
+  }
+
+  if (cfd) {
+    tester.cfd = atoi(cfd);
   }
 
   void * ptr;
@@ -130,9 +135,8 @@ int main(int argc, char * argv[], char * env[])
     rec.results[BT_PASS_SETUP] = BT_TEST_NONE;
   }
 
-  if (wres) {
-    write(tester.fd, "\0", 1);
-    write(tester.fd, &rec, sizeof(struct result_rec));
+  if (tester.cfd != -1) {
+    write(tester.cfd, &rec, sizeof(struct result_rec));
   }
 
   /* does not make much sense to run the test if setup has failed */
@@ -148,9 +152,8 @@ int main(int argc, char * argv[], char * env[])
     else
       rec.results[BT_PASS_TEST] = BT_TEST_CORRUPTED;
 
-    if (wres) {
-      write(tester.fd, "\0", 1);
-      write(tester.fd, &rec, sizeof(struct result_rec));
+    if (tester.cfd != -1) {
+      write(tester.cfd, &rec, sizeof(struct result_rec));
     }
   }
 
@@ -164,9 +167,8 @@ int main(int argc, char * argv[], char * env[])
       else if (result == BT_RESULT_FAIL)
         rec.results[BT_PASS_TEARDOWN] = BT_TEST_FAILED;
 
-      if (wres) {
-        write(tester.fd, "\0", 1);
-        write(tester.fd, &rec, sizeof(struct result_rec));
+      if (tester.cfd != -1) {
+        write(tester.cfd, &rec, sizeof(struct result_rec));
       }
     }
   }
@@ -174,14 +176,14 @@ int main(int argc, char * argv[], char * env[])
   /* we are done */
   rec.done = 1;
 
-  if (wres) {
-    write(tester.fd, "\0", 1);
-    write(tester.fd, &rec, sizeof(struct result_rec));
+  if (tester.cfd != -1) {
+    write(tester.cfd, &rec, sizeof(struct result_rec));
   }
 
   close(tester.fd);
 
   if (unload)
     dlclose(dl_handle);
+
   pthread_exit(NULL);
 }

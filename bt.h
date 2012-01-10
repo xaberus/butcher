@@ -41,11 +41,10 @@ typedef int (bt_setup_function_t)(BT_SETUP_FUNCTION_ARG);
 typedef int (bt_test_function_t)(BT_TEST_FUNCTION_ARG);
 
 struct bt_tester {
-  /*
-   *  pipe descriptors the log function should write to
-   *  (as always: read end, write and)
-   */
+  /* pipe descriptor the log function should write to */
   int fd;
+  /* pipe descriptor for the control stream */
+  int cfd;
 
   /* these should be considered private */
   bt_setup_function_t * setup;
