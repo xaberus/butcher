@@ -127,7 +127,7 @@ BAPI int bt_delete(bt_t ** butcher);
 
 #define bt_log(...) \
   do { \
-    dprintf(STDOUT_FILENO, __VA_ARGS__); \
+    fprintf(stdout, __VA_ARGS__); \
   } while (0)
 
 #define bt_assert(__expr) \

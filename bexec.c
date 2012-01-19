@@ -79,6 +79,8 @@ int main(int argc, char * argv[], char * env[])
 
   if (cfd) {
     tester.cfd = atoi(cfd);
+  } else {
+    tester.cfd  = -1;
   }
 
   void * ptr;
@@ -175,6 +177,8 @@ int main(int argc, char * argv[], char * env[])
 
   /* we are done */
   rec.done = 1;
+
+  fflush(stdout);
 
   if (tester.cfd != -1) {
     write(tester.cfd, &rec, sizeof(struct result_rec));
