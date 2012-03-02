@@ -1167,8 +1167,8 @@ int bt_chopper(bt_t * self, bt_test_t * test)
     close(pipeout[0]);
     close(STDOUT_FILENO);
     dup2(pipeout[1], STDOUT_FILENO);
+    dup2(pipeout[1], STDERR_FILENO);
     close(pipeout[1]);
-
     close(cntlout[0]); /* close read end of control stream */
 
     if (!self->debugger)
