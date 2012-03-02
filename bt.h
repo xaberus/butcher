@@ -133,7 +133,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define bt_assert(__expr) \
   do { \
     if (!(__expr)) { \
-      dprintf(STDOUT_FILENO, \
+      printf( \
           "%s:%s:%d: Assertion " # __expr " failed\n", \
           __FILE__, \
           __FUNCTION__, \
@@ -146,7 +146,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define _bt_assert_type_equal(__type, __fmt, __actual, __expected, __not, __extra) \
   do { \
     if (!((__actual) == (__expected))) { \
-      dprintf(STDOUT_FILENO, "%s:%s:%d:\n  Assertion failed: expeced " # __actual \
+      printf("%s:%s:%d:\n  Assertion failed: expeced " # __actual \
           " to be " __not __fmt ", got " __fmt __extra "\n", \
           __FILE__, __FUNCTION__, __LINE__, \
           (__type) __expected, (__type) __actual); \
@@ -159,7 +159,7 @@ BAPI int bt_delete(bt_t ** butcher);
     __type act = (__actual); \
     __type exp = (__expected);\
     if (((act) == (exp))) { \
-      dprintf(STDOUT_FILENO, "%s:%s:%d:\n  Assertion failed: expeced " # __actual \
+      printf("%s:%s:%d:\n  Assertion failed: expeced " # __actual \
           " "__not "to be " __fmt ", got " __fmt __extra "\n", \
           __FILE__, __FUNCTION__, __LINE__, \
           (__type) exp, (__type) act); \
@@ -170,7 +170,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define bt_assert_str_equal(__actual, __expected) \
   do { \
     if (strcmp((__actual), (__expected)) != 0) { \
-      dprintf(STDOUT_FILENO, "%s:%s:%d:\n  Assertion failed: expeced '%s' , got '%s' \n", \
+      printf("%s:%s:%d:\n  Assertion failed: expeced '%s' , got '%s' \n", \
           __FILE__, __FUNCTION__, __LINE__, \
           (__expected), (__actual)); \
       return BT_RESULT_FAIL; \
