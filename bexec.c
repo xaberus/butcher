@@ -77,10 +77,14 @@ int main(int argc, char * argv[], char * env[])
     exit(-1);
   }
 
+  FILE * oldstdout = NULL;
+
   if (cfd) {
     tester.cfd = atoi(cfd);
   } else {
     tester.cfd  = -1;
+    oldstdout = stdout;
+    stdout = stderr;
   }
 
   void * ptr;
@@ -179,6 +183,7 @@ int main(int argc, char * argv[], char * env[])
   rec.done = 1;
 
   fflush(stdout);
+  fflush(stderr);
 
   if (tester.cfd != -1) {
     write(tester.cfd, &rec, sizeof(struct result_rec));
@@ -188,6 +193,10 @@ int main(int argc, char * argv[], char * env[])
 
   if (unload)
     dlclose(dl_handle);
+
+  if (oldstdout) {
+    stdout = oldstdout;
+  }
 
   pthread_exit(NULL);
 }
