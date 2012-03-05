@@ -52,22 +52,19 @@ struct bt_log {
  *  - a test function
  *  - a log
  *  - an array of results
- *  - a description of the test case
  *  - a name of the test case
  */
 struct bt_test {
   struct bt_test * next;
-  bt_suite_t * suite;
+  unsigned         id;
+  bt_fn_kind_t     kind;
+  char           * name;
+  char             results[BT_PASS_MAX];
+  bt_log_t       * log;
+  struct rusage    ru;
 
-  char * name;
-  char * description;
-
-  char results[BT_PASS_MAX];
-  bt_log_t * log;
-
-  char * function;
-
-  struct rusage ru;
+  unsigned setupid;
+  unsigned teardownid;
 };
 
 /*
@@ -78,15 +75,11 @@ struct bt_test {
  */
 struct bt_suite {
   struct bt_suite * next;
-  bt_elf_t * elf;
 
-  bt_test_t * tests;
+  bt_test_t ** htests;
+  unsigned     hsize;
 
   char * name;
-  char * description;
-
-  char * setup;
-  char * teardown;
 };
 
 /*
@@ -96,13 +89,11 @@ struct bt_suite {
  */
 struct bt_elf {
   struct bt_elf * next;
-  bt_t * butcher;
-
-  bt_suite_t * suites;
-
-  char * name;
-
-  void * dlhandle;
+  bt_t        * butcher;
+  char        * name;
+  bt_suite_t ** hsuites;
+  unsigned      hsize;
+  void        * dlhandle;
 };
 
 /*
@@ -113,12 +104,11 @@ struct bt {
   bt_elf_t * elfs;
   char color;
   char verbose;
-  char descriptions;
   char messages;
   char envdump;
   char initialized;
 
-  int fd;
+  FILE * fd;
 
   char * bexec;
   char ** debugger;
@@ -126,6 +116,8 @@ struct bt {
 
   regex_t sregex, tregex;
 };
+
+#define BT_NO_ID ((unsigned) -1)
 
 struct result_rec {
   char magic[5];

@@ -5,56 +5,41 @@
 #include <string.h>
 #include <unistd.h>
 
-BT_SUITE_DEF(foo_test,"sample butcher test suite");
+BT_EXPORT();
 
-BT_SUITE_SETUP_DEF(foo_test, object)
+static int test_foo_setup(void * o, void ** op)
 {
-	bt_log("entered setup\n");
-
-	char * buffer = malloc(1024);
-
-	*object = buffer;
-	
-	bt_log("leaving setup\n");
-	return BT_RESULT_OK;
+  printf("setup!\n");
+  o = malloc(512);
+  *op = o;
+  return BT_RESULT_OK;
 }
 
-BT_TEST_DEF(foo_test, empty, object, "an empty test")
+static int test_foo_teardown(void * o, void ** op)
 {
-	UNUSED_PARAM(object);
-	return BT_RESULT_OK;
+  printf("teardown!\n");
+  free(o);
+  *op = NULL;
+  return BT_RESULT_OK;
 }
 
-BT_TEST_DEF(foo_test, sigsegv, object, "corrupted test")
+BT_TEST_FIXTURE(foosuite, test_foo, test_foo_setup, test_foo_teardown, o)
 {
-	UNUSED_PARAM(object);
-	int *i=NULL;
-	*i = 1;
-	return BT_RESULT_OK;
+  bt_assert(o);
+  return BT_RESULT_OK;
 }
 
-BT_TEST_DEF(foo_test, longtest, object, "long test")
+BT_TEST(foosuite, test_bar)
 {
-	UNUSED_PARAM(object);
-	for (int i = 0; i < 100; i++)
-		usleep(100);
-
-	return BT_RESULT_OK;
+  return BT_RESULT_OK;
 }
 
-
-BT_SUITE_TEARDOWN_DEF(foo_test, object)
+BT_TEST(foosuite, test_baz)
 {
-	bt_log("entered teardown\n");
-
-	char * buffer = *object;
-
-	free(buffer);
-
-	*object = NULL;
-
-	bt_log("leaving teardown\n");
-	return BT_RESULT_OK;
+  return BT_RESULT_OK;
 }
 
-
+BT_TEST(bananas, take_banana)
+{
+  return BT_RESULT_OK;
+}

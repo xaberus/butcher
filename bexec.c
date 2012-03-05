@@ -8,9 +8,34 @@
 
 #include "bt-private.h"
 
+#ifdef HAVE_LIBUNWIND
+# define UNW_LOCAL_ONLY
+# include <libunwind.h>
+#endif
+
 #include <pthread.h>
 
 bt_tester_t tester;
+
+void bt_backtrace()
+{
+#ifdef HAVE_LIBUNWIND
+  unw_cursor_t cursor; unw_context_t uc;
+  unw_word_t ip, sp, off;
+  char buf[512];
+
+  unw_getcontext(&uc);
+  unw_init_local(&cursor, &uc);
+  while (unw_step(&cursor) > 0) {
+    unw_get_reg(&cursor, UNW_REG_IP, &ip);
+    unw_get_reg(&cursor, UNW_REG_SP, &sp);
+    unw_get_proc_name(&cursor, buf, 512, &off);
+    if (strcmp(buf, "main") == 0)
+      return;
+    printf ("in [0x%016lx] @ %s() + %ld\n", (long) ip, buf, (long) off);
+  }
+#endif
+}
 
 static inline
 int get_env_bool(const char * name, int def)
@@ -49,31 +74,43 @@ int main(int argc, char * argv[], char * env[])
   unload = get_env_bool("butcher_unload", 1);
 
   if (envdump) {
-    dprintf(STDERR_FILENO, "BEXEC here ( env -i ");
+    fprintf(stderr, "BEXEC here ( env -i ");
     for (int i = 0; env[i]; i++)
-      dprintf(STDERR_FILENO, "'%s' ", env[i]);
+      fprintf(stderr, "'%s' ", env[i]);
     for (int i = 0; argv[i]; i++)
-      dprintf(STDERR_FILENO, "'%s' ", argv[i]);
-    dprintf(STDERR_FILENO, ")\n");
+      fprintf(stderr, "'%s' ", argv[i]);
+    fprintf(stderr, ")\n");
   }
 
   char * dl_lib = getenv("butcher_elf_name");
-  char * dl_setup = getenv("butcher_suite_setup");
-  char * dl_teardown = getenv("butcher_suite_teardown");
+  char * dl_setup = getenv("butcher_test_setup");
+  char * dl_teardown = getenv("butcher_test_teardown");
   char * dl_test = getenv("butcher_test_function");
   char * cfd = getenv("butcher_cfd");
 
   if (!dl_lib) {
-    dprintf(STDERR_FILENO, "butcher_elf_name not set\n");
+    fprintf(stderr, "butcher_elf_name not set\n");
     exit(-1);
   }
   if (!dl_test) {
-    dprintf(STDERR_FILENO, "butcher_test_function not set\n");
+    fprintf(stderr, "butcher_test_function not set\n");
     exit(-1);
   }
 
   if ((dl_handle = dlopen(dl_lib, RTLD_NOW)) == NULL) {
-    dprintf(STDERR_FILENO, "ERROR: dlopen returned %s\n", dlerror());
+    fprintf(stderr, "ERROR: dlopen returned %s\n", dlerror());
+    exit(-1);
+  }
+
+  const bt_fn_t * bsect;
+  if (!(bsect = dlsym(dl_handle, "__start_bexec"))) {
+    fprintf(stderr, "ERROR: no bexec section: %s\n", dlerror());
+    exit(-1);
+  }
+
+  const bt_fn_t * bsect_end;
+  if (!(bsect_end = dlsym(dl_handle, "__stop_bexec"))) {
+    fprintf(stderr, "ERROR: no valid bexec section: %s\n", dlerror());
     exit(-1);
   }
 
@@ -87,29 +124,39 @@ int main(int argc, char * argv[], char * env[])
     stdout = stderr;
   }
 
-  void * ptr;
-
   if (dl_setup) {
-    if ((ptr = dlsym(dl_handle, dl_setup)) == NULL)
-      dlerror();
-    *(void **) &tester.setup = ptr;
+    unsigned id = atol(dl_setup);
+    if (bsect + id < bsect_end) {
+      tester.setup = bsect[id].function;
+    } else {
+      fprintf(stderr, "ERROR: invalid setup function: %u\n", id);
+      exit(-1);
+    }
   } else {
     tester.setup = NULL;
   }
 
   if (dl_teardown) {
-    if ((ptr = dlsym(dl_handle, dl_teardown)) == NULL)
-      dlerror();
-    *(void **) &tester.teardown = ptr;
+    unsigned id = atol(dl_teardown);
+    if (bsect + id < bsect_end) {
+      tester.teardown = bsect[id].function;
+    } else {
+      fprintf(stderr, "ERROR: invalid setup function: %u\n", id);
+      exit(-1);
+    }
   } else {
     tester.teardown = NULL;
   }
 
-  if ((ptr = dlsym(dl_handle, dl_test)) == NULL) {
-    dlerror();
-    exit(-1);
+  {
+    unsigned id = atol(dl_test);
+    if (bsect + id < bsect_end) {
+      tester.function = bsect[id].function;
+    } else {
+      fprintf(stderr, "ERROR: invalid setup function: %u\n", id);
+      exit(-1);
+    }
   }
-  *(void **) &tester.function = ptr;
 
   /* stdout will be redirected */
   tester.fd = STDOUT_FILENO;
@@ -130,7 +177,7 @@ int main(int argc, char * argv[], char * env[])
   result = BT_TEST_NONE;
 
   if (tester.setup) {
-    result = (*tester.setup)(&object);
+    result = (*tester.setup)(NULL, &object);
     if (result == BT_RESULT_OK)
       rec.results[BT_PASS_SETUP] = BT_TEST_SUCCEEDED;
     else if (result == BT_RESULT_IGNORE)
@@ -147,7 +194,7 @@ int main(int argc, char * argv[], char * env[])
 
   /* does not make much sense to run the test if setup has failed */
   if (result <= BT_TEST_SUCCEEDED) {
-    test_result = (*tester.function)(object);
+    test_result = (*tester.function)(object, &object);
 
     if (test_result == BT_RESULT_OK)
       rec.results[BT_PASS_TEST] = BT_TEST_SUCCEEDED;
@@ -165,7 +212,7 @@ int main(int argc, char * argv[], char * env[])
 
   if (result <= BT_TEST_SUCCEEDED) {
     if (tester.teardown) {
-      result = (*tester.teardown)(&object);
+      result = (*tester.teardown)(object, &object);
       if (result == BT_RESULT_OK)
         rec.results[BT_PASS_TEARDOWN] = BT_TEST_SUCCEEDED;
       else if (result == BT_RESULT_IGNORE)

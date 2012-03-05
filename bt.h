@@ -9,11 +9,12 @@
 
 #define BAPI extern
 #include <errno.h>
+#include <stdio.h>
 
 /*#define return_error(_error) return _error*/
 #define return_error(_error) \
   do { \
-    dprintf(2, "ERROR %d in %s\n", _error, __FUNCTION__); \
+    fprintf(stderr, "ERROR %d in %s\n", _error, __FUNCTION__); \
     return _error; \
   } while (0)
 
@@ -25,7 +26,6 @@ enum {
   BT_RESULT_FAIL
 };
 
-
 #define BT_FLAG_VERBOSE (1 << 0)
 #define BT_FLAG_COLOR (1 << 1)
 #define BT_FLAG_DESCRIPTIONS (1 << 2)
@@ -34,11 +34,7 @@ enum {
 
 typedef struct bt_tester bt_tester_t;
 
-#define BT_SETUP_FUNCTION_ARG void **
-#define BT_TEST_FUNCTION_ARG void *
-
-typedef int (bt_setup_function_t)(BT_SETUP_FUNCTION_ARG);
-typedef int (bt_test_function_t)(BT_TEST_FUNCTION_ARG);
+typedef int (bt_test_function_t)(void *, void **);
 
 struct bt_tester {
   /* pipe descriptor the log function should write to */
@@ -47,18 +43,35 @@ struct bt_tester {
   int cfd;
 
   /* these should be considered private */
-  bt_setup_function_t * setup;
+  bt_test_function_t * setup;
   bt_test_function_t * function;
-  bt_setup_function_t * teardown;
+  bt_test_function_t * teardown;
 };
 
 typedef struct bt bt_t;
+
+typedef struct bt_fn bt_fn_t;
+
+struct bt_fn {
+  const char * name;
+  const char * extra;
+  unsigned long flags;
+  int (* function)(void *, void **);
+};
+
+typedef enum {
+  BT_FN_KIND_PTEST,
+  BT_FN_KIND_FTEST,
+  BT_FN_KIND_SETUP,
+  BT_FN_KIND_TEARDOWN,
+} bt_fn_kind_t;
+
 
 BAPI int bt_new(bt_t ** butcher);
 
 BAPI int bt_init(bt_t * butcher,
     const char * name,
-    int fd,
+    FILE * fd,
     const char * smatch,
     const char * tmatch);
 BAPI int bt_tune(bt_t * butcher, unsigned int flags);
@@ -73,51 +86,70 @@ BAPI int bt_report(bt_t * butcher);
 
 BAPI int bt_delete(bt_t ** butcher);
 
-/*
+BAPI void bt_backtrace();
+
+/**
  *
  * the layout embedded inside a shared object created from:
  * ~~~snip~~~
- * BT_SUITE_DEF(<name>, "suite description");
- * BT_SUITE_SETUP_DEF(<name>) {...}
- * BT_SUITE_TEARDOWN_DEF(<name>) {...}
- * BT_TEST_DEF(<name>, <test-name_1>, "test 1 description") {...}
+ * BT_EXPORT();
+ * BT_TEST(<suite>, <test 1>) {...}
+ * BT_TEST_FIXTURE(<suite>, <test 2>, <setup>, <teardown>)
  * ...
  * ~~~snap~~~
  * boils down to:
  * ~~~snip~~~
  * elf.so
- * __bt_suite_def_<name> => "suite description" { const char [] }
- *  __bt_suite_<name>_setup()
- *  __bt_suite_<name>_teardown()
- *
- *    __bt_suite_<name>_test_<test-name_1>()
- *      __bt_suite_<name>_test_<test-name_1>_descr => "test 1 description" { const char [] }
+ *  bt_fn bexec[] = {
+ *    {"<test 1>", "<suite>", BT_FN_KIND_PTEST, <test 1>},
+ *    {"<test 2>", "<suite>", BT_FN_KIND_SETUP, <setup>},
+ *    {"<test 2>", "<suite>", BT_FN_KIND_TEARDOWN, <teardown>},
+ *    {"<test 2>", "<suite>", BT_FN_KIND_FTEST, <test 2>},
  *    ...
+ *  }
  * ~~~snap~~~
  */
 
 /* client interface */
 
 /* macro voodoo */
-#define BT_SUITE_DEF(__sname, __sdesc) \
-  const char __bt_suite_def_ ## __sname[] = __sdesc
 
-#define BT_SUITE_SETUP_DEF(__sname, __objrefname) \
-  int __bt_suite_ ## __sname ## _setup(BT_SETUP_FUNCTION_ARG __objrefname)
+#define BT_TEST(_suite, _name) \
+  static int _name(); \
+  static const bt_fn_t _name##rec __attribute__ ((section ("bexec"))) = { \
+    #_name, \
+    #_suite, \
+    BT_FN_KIND_PTEST, \
+    _name, \
+  };\
+  static int _name()
 
-#define BT_SUITE_TEARDOWN_DEF(__sname, __objrefname) \
-  int __bt_suite_ ## __sname ## _teardown(BT_SETUP_FUNCTION_ARG __objrefname)
+#define BT_TEST_FIXTURE(_suite, _name, _setup, _teardown, _arg) \
+  static const bt_fn_t _name##_setup_rec __attribute__ ((section ("bexec"))) = { \
+    #_name, \
+    #_suite, \
+    BT_FN_KIND_SETUP, \
+    _setup, \
+  };\
+  static const bt_fn_t _name##_teardown_rec __attribute__ ((section ("bexec"))) = { \
+    #_name, \
+    #_suite, \
+    BT_FN_KIND_TEARDOWN, \
+    _teardown, \
+  };\
+  static int _name(void *); \
+  static const bt_fn_t _name##rec __attribute__ ((section ("bexec"))) = { \
+    #_name, \
+    #_suite, \
+    BT_FN_KIND_FTEST, \
+    (int (*)(void *, void **)) _name, \
+  };\
+  static int _name(void * _arg)
 
-#define BT_TEST_DEF(__sname, __tname, __objname, __tdesc) \
-  const char __bt_suite_ ## __sname ## _test_ ## __tname ## _descr[] = __tdesc; \
-  int __bt_suite_ ## __sname ## _test_ ## __tname(BT_TEST_FUNCTION_ARG __objname)
-
-#define BT_TEST_DEF_PLAIN(__sname, __tname, __tdesc) \
-  const char __bt_suite_ ## __sname ## _test_ ## __tname ## _descr[] = __tdesc; \
-  int __bt_suite_ ## __sname ## _test_ ## __tname()
-
-#define BT_TEST(__sname, __tname) \
-  __bt_suite_ ## __sname ## _test_ ## __tname(object)
+#define BT_EXPORT() \
+  extern const struct test __start_bexec, __stop_bexec;\
+  __attribute__((used)) \
+  static const struct test * __export_bexec[2] = {&__start_bexec, &__stop_bexec}
 
 
 /* test functors */
@@ -133,6 +165,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define bt_assert(__expr) \
   do { \
     if (!(__expr)) { \
+      bt_backtrace(); \
       printf( \
           "%s:%s:%d: Assertion " # __expr " failed\n", \
           __FILE__, \
@@ -146,6 +179,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define _bt_assert_type_equal(__type, __fmt, __actual, __expected, __not, __extra) \
   do { \
     if (!((__actual) == (__expected))) { \
+      bt_backtrace(); \
       printf("%s:%s:%d:\n  Assertion failed: expeced " # __actual \
           " to be " __not __fmt ", got " __fmt __extra "\n", \
           __FILE__, __FUNCTION__, __LINE__, \
@@ -159,6 +193,7 @@ BAPI int bt_delete(bt_t ** butcher);
     __type act = (__actual); \
     __type exp = (__expected);\
     if (((act) == (exp))) { \
+      bt_backtrace(); \
       printf("%s:%s:%d:\n  Assertion failed: expeced " # __actual \
           " "__not "to be " __fmt ", got " __fmt __extra "\n", \
           __FILE__, __FUNCTION__, __LINE__, \
@@ -170,6 +205,7 @@ BAPI int bt_delete(bt_t ** butcher);
 #define bt_assert_str_equal(__actual, __expected) \
   do { \
     if (strcmp((__actual), (__expected)) != 0) { \
+      bt_backtrace(); \
       printf("%s:%s:%d:\n  Assertion failed: expeced '%s' , got '%s' \n", \
           __FILE__, __FUNCTION__, __LINE__, \
           (__expected), (__actual)); \

@@ -2,8 +2,6 @@ cmake_minimum_required (VERSION 2.8.6)
 project(butcher)
 
 set(CMAKE_C_FLAGS "-std=gnu99 -Wall -Wextra -pedantic -g -ggdb -D_GNU_SOURCE")
-set(CMAKE_SHARED_LIBRARY_C_FLAGS "-Wl,--no-undefined")
-#-Werror -fprofile-arcs -ftest-coverage
 
 include_directories(${butcher_SOURCE_DIR})
 
@@ -20,10 +18,9 @@ add_executable(butcher
 )
 set_target_properties(butcher PROPERTIES COMPILE_FLAGS "-rdynamic -pthread")
 set_target_properties(butcher PROPERTIES LINK_FLAGS "-Wl,-rpath,.  -rdynamic -pthread")
-target_link_libraries(butcher dl elf)
+target_link_libraries(butcher dl)
 
 add_library(foo SHARED
   ${butcher_SOURCE_DIR}/libfoo.c
 )
 set_target_properties(foo PROPERTIES COMPILE_FLAGS "-fPIC")
-

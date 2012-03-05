@@ -27,6 +27,9 @@ enum butcher_opt {
   OPT_USAGE,
   OPT_BEXEC,
   OPT_DEBUGGER,
+  OPT_VALGRIND,
+  OPT_CGDB,
+  OPT_GDB,
 };
 
 static const struct options {
@@ -43,85 +46,100 @@ static const struct options {
       "as povided by the POSIX2 specification (man 7 regex)"
   },
   {OPT_MATCH_TEST,
-    .long_name = "match-test", 
+    .long_name = "match-test",
     .short_name = 't', .need_arg = 1,
     .help = "run only matched tests; <arg> is a regex"
   },
   {OPT_VERBOSE,
-    .long_name = "verbose", 
+    .long_name = "verbose",
     .short_name = 'v', .need_arg = 0,
     .help = "be verbose, repeat for descriptions and messages (in order)"
   },
   {OPT_QUIET,
-    .long_name = "quiet", 
+    .long_name = "quiet",
     .short_name = 'q', .need_arg = 0,
     .help = "be quiet (default)"
   },
   {OPT_COLOR,
-    .long_name = "color", 
+    .long_name = "color",
     .short_name = 'c', .need_arg = 0,
     .help = "enable color output"
   },
   {OPT_NOCOLOR,
-    .long_name = "no-color", 
+    .long_name = "no-color",
     .short_name = 'n', .need_arg = 0,
     .help = "disable color output"
   },
   {OPT_DESCRIPTOR,
-    .long_name = "descriptor", 
+    .long_name = "descriptor",
     .short_name = 'd', .need_arg = 1,
     .help = "write to given descriptor instead of 1 (stdout)"
   },
   {OPT_LIST,
-    .long_name = "list", 
+    .long_name = "list",
     .short_name = 'l', .need_arg = 0,
     .help = "instead of running tests, just dump everything available"
   },
   {OPT_HELP,
-    .long_name = "help", 
+    .long_name = "help",
     .short_name = 'h', .need_arg = 0,
     .help = "display this screen"
   },
   {OPT_USAGE,
-    .long_name = "usage", 
+    .long_name = "usage",
     .short_name = 0, .need_arg = 0,
     .help = "display this screen"
   },
   {OPT_BEXEC,
-    .long_name = "bexec", 
+    .long_name = "bexec",
     .short_name = 'b', .need_arg = 1,
     .help = "use <arg> as path to bexec, e.g. /usr/bin/bexec"
   },
   {OPT_DEBUGGER,
-    .long_name = "debugger", 
+    .long_name = "debugger",
     .short_name = 'g', .need_arg = 1,
     .help = "use <arg> as debugger for bexec, e.g. /usr/bin/valgrind"
+  },
+  {OPT_VALGRIND,
+    .long_name = "--valgrind",
+    .short_name = 'V', .need_arg = 0,
+    .help = "equivalent of -g 'valgrind --show-reachable=yes --leak-check=full'"
+  },
+  {OPT_CGDB,
+    .long_name = "--cgdb",
+    .short_name = 'C', .need_arg = 0,
+    .help = "equivalent of -g 'cgdb'"
+  },
+  {OPT_GDB,
+    .long_name = "--gdb",
+    .short_name = 'G', .need_arg = 0,
+    .help = "equivalent of -g 'gdb'"
   },
   {OPT_ERROR, NULL, 0, 0, NULL}
 };
 
-void usage(int fd)
+void usage(FILE * fd)
 {
   unsigned int idx;
 
-  dprintf(fd,
+  fprintf(fd,
       "The BUTCHER unit test - runs test functions inside shared objects \n"
       "with the help of libelf and libdl. See \"bt.h\" for details.\n"
       "\n"
       "Usage: \n"
       "	export LD_LIBRARY_PATH=<path to link dependencies>\n"
       "	butcher <options> <shared-objects>\n");
-  dprintf(fd,
+  fprintf(fd,
       "Options: \n");
 
   for (idx = 0; options[idx].long_name; idx++) {
     if (options[idx].short_name)
-      dprintf(fd,
+      fprintf(fd,
           "	--%s%s (-%c%s)\n",
           options[idx].long_name, options[idx].need_arg ? " <arg>" : "",
           options[idx].short_name, options[idx].need_arg ? " <arg>" : "");
     else
-      dprintf(fd,
+      fprintf(fd,
           "	--%s %s\n", options[idx].long_name, options[idx].need_arg ? "<arg>" : "");
 
     const char * s = options[idx].help;
@@ -130,10 +148,10 @@ void usage(int fd)
     while (s && *s) {
       e = strchr(s, '\n');
       if (e) {
-        dprintf(fd,
+        fprintf(fd,
             "		%.*s\n", (int) (e - s), s);
       } else {
-        dprintf(fd,
+        fprintf(fd,
             "		%s\n", s);
       }
       s = (e) ? e + 1 : NULL;
@@ -141,7 +159,7 @@ void usage(int fd)
     ;
   }
 
-  dprintf(fd,
+  fprintf(fd,
       "Example: \n"
       "	butcher -cv -s '^ugly' -t '^important' libfoo.so libbar.so\n");
 }
@@ -151,24 +169,18 @@ int main(int argc, char * argv[], char * env[])
 
   bt_t       * butcher = NULL;
   int          err;
-
   int          paramc;
   char       * paramv[argc + 1];
-
-  int          i, fd, shortflag;
+  int          i, shortflag;
   size_t       len;
-
   char       * smatch, * tmatch;
-
   int          list, help, verbose, color;
-
   unsigned int idx;
-
   char       * argument, * bexec, * debugger;
+  FILE       * fd = NULL;
+  int          ofd = STDOUT_FILENO;
 
   UNUSED_PARAM(env);
-
-  fd = 1; /* stdout */
 
   err = bt_new(&butcher);
   if (err)
@@ -225,7 +237,7 @@ int main(int argc, char * argv[], char * env[])
                     i++;
                     goto handle_opt;
                   } else {
-                    dprintf(fd, "'%s' needs an argument\n", argv[i]);
+                    fprintf(stderr, "'%s' needs an argument\n", argv[i]);
                     goto failure;
                   }
                 }
@@ -235,7 +247,7 @@ int main(int argc, char * argv[], char * env[])
                 if (strncmp(argv[i] + 2, options[idx].long_name, slen) == 0) {
                   if (slen <= len + 2 && argv[i][2 + slen] == '=') {
                     if (!options[idx].need_arg) {
-                      dprintf(fd,
+                      fprintf(stderr,
                           "flag '--%s' does not accept any arguments'\n",
                           options[idx].long_name);
                       goto failure;
@@ -246,7 +258,7 @@ int main(int argc, char * argv[], char * env[])
                 }
               }
             }
-            dprintf(fd, "unknown flag '%s'\n", argv[i]);
+            fprintf(stderr, "unknown flag '%s'\n", argv[i]);
             goto failure;
           } else {
             /* short options */
@@ -257,12 +269,12 @@ int main(int argc, char * argv[], char * env[])
                 if (options[idx].short_name && options[idx].short_name == argv[i][n]) {
                   if (options[idx].need_arg) {
                     if (n != len - 1) {
-                      dprintf(fd, "needed argument, got trailing flags after '%c' in '%s'\n",
+                      fprintf(stderr, "needed argument, got trailing flags after '%c' in '%s'\n",
                           argv[i][n], argv[i]);
                       goto failure;
                     }
                     if (i == argc - 1) {
-                      dprintf(fd, "'-%c' needs an argument\n", argv[i][n]);
+                      fprintf(stderr, "'-%c' needs an argument\n", argv[i][n]);
                       goto failure;
                     }
 
@@ -273,12 +285,10 @@ int main(int argc, char * argv[], char * env[])
                 }
               }
 
-              dprintf(fd, "unknown flag '-%c'\n", argv[i][n]);
+              fprintf(stderr, "unknown flag '-%c'\n", argv[i][n]);
               goto failure;
-
-next_flag: {
-                continue;
-              }
+next_flag:
+              continue;
             }
 
             shortflag = 0;
@@ -307,7 +317,7 @@ handle_opt: {
         case OPT_NOCOLOR:
           color = 0; break;
         case OPT_DESCRIPTOR:
-          fd = atoi(argument); break;
+          ofd = atoi(argument); break;
         case OPT_LIST:
           list = 1; break;
         case OPT_HELP:
@@ -317,6 +327,12 @@ handle_opt: {
           debugger = argument; break;
         case OPT_BEXEC:
           bexec = strdup(argument); break;
+        case OPT_VALGRIND:
+          debugger = "valgrind --show-reachable=yes --leak-check=full"; break;
+        case OPT_CGDB:
+          debugger = "cgdb"; break;
+        case OPT_GDB:
+          debugger = "gdb"; break;
         default:
           goto failure;
       }
@@ -331,6 +347,12 @@ failure: {
     }
   }
 
+  fd = fdopen(ofd, "w");
+  if (!fd) {
+    fprintf(stderr, "could not open passed fd\n");
+    goto finalize;
+  }
+
   if (help || paramc == 0) {
     usage(fd);
     goto finalize;
@@ -338,17 +360,24 @@ failure: {
 
   paramv[paramc] = NULL;
 
-  if (verbose)
-    dprintf(fd, "#############################\n");
-  dprintf(fd, "### The %sBUTCHER%s unit test ###\n",
-      color ? "\x1b[1;31m" : "", color ? "\x1b[0m" : "");
-  if (verbose) {
-    dprintf(fd, "#############################\n\n");
-    dprintf(fd, "\n");
+  if (!debugger) {
+    if (verbose)
+      fprintf(fd, "#############################\n");
+    fprintf(fd, "### The %sBUTCHER%s unit test ###\n",
+        color ? "\x1b[1;31m" : "", color ? "\x1b[0m" : "");
+    if (verbose) {
+      fprintf(fd, "#############################\n\n");
+      fprintf(fd, "\n");
+    }
+  }
+
+  if (debugger) {
+    if (!tmatch)
+      tmatch = "[^A-Za-z0-9_]\\+";
   }
 
   if (smatch || tmatch)
-    dprintf(fd, "tests matching '%s' in suites matching '%s' are going to be loaded\n\n",
+    fprintf(fd, "tests matching '%s' in suites matching '%s' are going to be loaded\n",
         tmatch ? tmatch : ".*", smatch ? smatch : ".*");
 
   if (!bexec) {
@@ -396,10 +425,10 @@ failure: {
 
   err = bt_loadv(butcher, paramc, paramv);
   if (err) {
-    dprintf(fd, "could not load one of shared objects in:\n");
+    fprintf(fd, "could not load one of shared objects in:\n");
     for (int i = 0; i < paramc; i++)
-      dprintf(fd, "	'%s'\n", paramv[i]);
-    dprintf(fd, "the last error was: %d\n", err);
+      fprintf(fd, "	'%s'\n", paramv[i]);
+    fprintf(fd, "the last error was: %d\n", err);
     goto finalize;
   }
 
@@ -412,9 +441,11 @@ failure: {
       err = bt_chop(butcher);
       if (err)
         goto finalize;
-      err = bt_report(butcher);
-      if (err)
-        goto finalize;
+      if (!debugger) {
+        err = bt_report(butcher);
+        if (err)
+          goto finalize;
+      }
     }
   }
 
@@ -422,6 +453,8 @@ finalize: {
     if (bexec)
       free(bexec);
     bt_delete(&butcher);
+    if (fd)
+      fclose(fd);
     exit(err);
   }
 }
